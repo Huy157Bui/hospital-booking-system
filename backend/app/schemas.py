@@ -323,16 +323,3 @@ class PrescriptionOut(PrescriptionBase):
 
     class Config:
         from_attributes = True
-
-
-
-
-
-
-
-
-
-
-
-
-

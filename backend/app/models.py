@@ -232,4 +232,3 @@ class PrescriptionDetail(Base):
     # n-1
     prescription = relationship("Prescription", back_populates="prescription_details", uselist=False)
     medicine = relationship("Medicine", back_populates="prescription_details", uselist=False)
-
