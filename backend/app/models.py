@@ -2,7 +2,7 @@ from sqlalchemy import (Column, Integer, String, Boolean, DateTime, Enum,
                         ForeignKey, Float, Numeric, Time, Date, SmallInteger)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from app.database import Base
+from app.base import Base
 import enum
 
 class UserRole(str, enum.Enum):
@@ -19,8 +19,8 @@ class User(Base):
 
     id = Column(Integer, primary_key=True)
     full_name = Column(String(100), nullable=False)
-    username = Column(String(50), unique=True, nullable=False)
-    password = Column(String(255), nullable=False)
+    username = Column(String(255), unique=True, nullable=False)
+    password = Column(String(500), nullable=False)
     email = Column(String(255), unique=True, nullable=False)
     phone = Column(String(50), nullable=True)
     avatar = Column(String(500), nullable=True)

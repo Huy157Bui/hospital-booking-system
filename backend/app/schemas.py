@@ -40,12 +40,28 @@ class UserUpdate(BaseModel):
 
 class UserOut(BaseModel):
     id: int
+    username: str
+    email: EmailStr
+    full_name: Optional[str]
+    phone: Optional[str]
+    avatar: Optional[str]
+    role: UserRole
+    is_active: bool
     last_login: Optional[datetime] = None
-    created_at: datetime
-    updated_at: Optional[datetime] = None
+    created_date: datetime
+    updated_date: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: 'UserOut'
 
 class PatientBase(BaseModel):
     date_of_birth: Optional[datetime] = None

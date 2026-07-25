@@ -1,4 +1,4 @@
-from typing import Generic, TypeVar, Type, List, Optional
+from typing import Generic, TypeVar, Type, Optional
 from app.database import Base
 from sqlalchemy.orm import Session
 from app.models import User, Patient, Doctor, Specialty, Schedule, Medicine, Prescription, PrescriptionDetail, \
@@ -15,7 +15,7 @@ class BaseRepository(Generic[ModelType]):
     def get_by_id(self, id:int) -> Optional[ModelType]:
         return self.db.query(self.model).filter(self.model.id == id).first()
 
-    def get_all(self, *, skip: int = 0, limit: int = 100) -> List[ModelType]:
+    def get_all(self, *, skip: int = 0, limit: int = 100) -> list[ModelType]:
         return self.db.query(self.model).offset(skip).limit(limit).all()
 
     def create(self, data: ModelType) -> ModelType:
@@ -25,7 +25,6 @@ class BaseRepository(Generic[ModelType]):
         return data
 
     def update(self, data: ModelType) -> ModelType:
-        #self.db.update(data)
         self.db.commit()
         self.db.refresh(data)
         return data
@@ -50,7 +49,7 @@ class UserRepository(BaseRepository[User]):
     def get_by_email(self, email: str) -> Optional[User]:
         return self.db.query(User).filter(User.email == email).first()
 
-    def get_active_users(self, *, skip: int = 0, limit: int = 100) -> List[User]:
+    def get_active_users(self, *, skip: int = 0, limit: int = 100) -> list[User]:
         return self.db.query(User).filter(User.is_active == True).offset(skip).limit(limit).all()
 
 class PatientRepository(BaseRepository[Patient]):
@@ -70,7 +69,7 @@ class DoctorRepository(BaseRepository[Doctor]):
     def get_by_license(self, license_number: str) -> Optional[Doctor]:
         return self.db.query(Doctor).filter(Doctor.license_number == license_number).first()
 
-    def get_by_specialty(self, specialty_id: int, *, skip: int = 0, limit: int = 100) -> List[Doctor]:
+    def get_by_specialty(self, specialty_id: int, *, skip: int = 0, limit: int = 100) -> list[Doctor]:
         return self.db.query(Doctor).filter(Doctor.specialty_id == specialty_id).offset(skip).limit(limit).all()
 
     def get_by_user_id(self, user_id: int) -> Optional[Doctor]:
@@ -87,21 +86,21 @@ class ScheduleRepository(BaseRepository[Schedule]):
     def __init__(self, db: Session):
         super().__init__(Schedule, db)
 
-    def get_by_doctor_and_date(self, doctor_id: int, work_at: date) -> List[Schedule]:
+    def get_by_doctor_and_date(self, doctor_id: int, work_date: date) -> list[Schedule]:
         return self.db.query(Schedule).filter(Schedule.doctor_id == doctor_id,
-                                              Schedule.work_at == work_at).all()
+                                              Schedule.work_date == work_date).all()
 
-    def get_avaiable_schedules(self, *, skip: int = 0, limit: int = 100) -> List[Schedule]:
+    def get_avaiable_schedules(self, *, skip: int = 0, limit: int = 100) -> list[Schedule]:
         return self.db.query(Schedule).filter(Schedule.status == 'available').offset(skip).limit(limit).all()
 
 class AppointmentRepository(BaseRepository[Appointment]):
     def __init__(self, db: Session):
         super().__init__(Appointment, db)
 
-    def get_by_patient(self, patient_id: int, *, skip: int = 0, limit: int = 100) -> List[Appointment]:
+    def get_by_patient(self, patient_id: int, *, skip: int = 0, limit: int = 100) -> list[Appointment]:
         return self.db.query(Appointment).filter(Appointment.patient_id == patient_id).offset(skip).limit(limit).all()
 
-    def get_by_doctor(self, doctor_id: int, *, skip: int = 0, limit: int = 100) -> List[Appointment]:
+    def get_by_doctor(self, doctor_id: int, *, skip: int = 0, limit: int = 100) -> list[Appointment]:
         return self.db.query(Appointment).filter(Appointment.doctor_id == doctor_id).offset(skip).limit(limit).all()
 
 class MedicalRecordRepository(BaseRepository[MedicalRecord]):
@@ -121,27 +120,27 @@ class ExaminationRepository(BaseRepository[Examination]):
     def get_by_appointment(self, appointment_id: int) -> Optional[Examination]:
         return self.db.query(Examination).filter(Examination.appointment_id == appointment_id).first()
 
-    def get_by_patient(self, patient_id: int, *, skip: int = 0, limit: int = 100) -> List[Examination]:
+    def get_by_patient(self, patient_id: int, *, skip: int = 0, limit: int = 100) -> list[Examination]:
         return self.db.query(Examination).filter(Examination.patient_id == patient_id).offset(skip).limit(limit).all()
 
-    def get_by_doctor(self, doctor_id: int, *, skip: int = 0, limit: int = 100) -> List[Examination]:
+    def get_by_doctor(self, doctor_id: int, *, skip: int = 0, limit: int = 100) -> list[Examination]:
         return self.db.query(Examination).filter(Examination.doctor_id == doctor_id).offset(skip).limit(limit).all()
 
 class PrescriptionRepository(BaseRepository[Prescription]):
     def __init__(self, db: Session):
         super().__init__(Prescription, db)
 
-    def get_by_examination(self, examination_id: int) -> List[Prescription]:
-        return self.db.query(Prescription).filter(Prescription.examination_id == examination_id).first().all()
+    def get_by_examination(self, examination_id: int) -> list[Prescription]:
+        return self.db.query(Prescription).filter(Prescription.examination_id == examination_id).all()
 
 class PrescriptionDetailRepository(BaseRepository[PrescriptionDetail]):
     def __init__(self, db: Session):
         super().__init__(PrescriptionDetail, db)
 
-    def get_by_prescription(self, prescription_id: int) -> List[PrescriptionDetail]:
+    def get_by_prescription(self, prescription_id: int) -> list[PrescriptionDetail]:
         return self.db.query(PrescriptionDetail).filter(PrescriptionDetail.prescription_id == prescription_id).all()
 
-    def get_by_medicine(self, medicine_id: int, *, skip: int = 0, limit: int = 100) -> List[PrescriptionDetail]:
+    def get_by_medicine(self, medicine_id: int, *, skip: int = 0, limit: int = 100) -> list[PrescriptionDetail]:
         return self.db.query(PrescriptionDetail).filter(PrescriptionDetail.medicine_id == medicine_id).offset(skip).limit(limit).all()
 
 class MedicineRepository(BaseRepository[Medicine]):
@@ -151,5 +150,5 @@ class MedicineRepository(BaseRepository[Medicine]):
     def get_by_code(self, code: str) -> Optional[Medicine]:
         return self.db.query(Medicine).filter(Medicine.code == code).first()
 
-    def get_active_medicines(self, *, skip: int = 0, limit: int = 100) -> List[Medicine]:
-        return self.db.query(Medicine).filter(Medicine.active == "active").offset(skip).limit(limit).all()
+    def get_active_medicines(self, *, skip: int = 0, limit: int = 100) -> list[Medicine]:
+        return self.db.query(Medicine).filter(Medicine.status == "active").offset(skip).limit(limit).all()

@@ -1,11 +1,14 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.database import engine, Base
 from app.api import router
 
-app = FastAPI()
-
-@app.on_event("startup")
-def init_db():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    yield
 
-app.include_router(router, prefix="/api/v1")
+
+app = FastAPI(lifespan=lifespan)
+
+app.include_router(router, prefix="")
