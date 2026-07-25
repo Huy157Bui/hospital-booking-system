@@ -3,9 +3,9 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
-from app.models import User, UserRole, Appointment
-from app.repositories import UserRepository, AppointmentRepository
-from app.schemas import UserCreate
+from app.models import User, UserRole, Appointment, Specialty
+from app.repositories import UserRepository, AppointmentRepository, SpecialtyRepository
+from app.schemas import UserCreate, SpecialtyCreate
 from sqlalchemy.orm import Session
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -56,23 +56,16 @@ class AuthService:
     def login(self, db: Session, username: str, password: str) -> Optional[dict]:
         user = self.authenticate(db, username, password)
         if not user:
-            return None
+            return ValueError("Invalid username or password")
         if not user.is_active:
             raise ValueError("Account is inactive")
 
-        # Cập nhật last_login
         user.last_login = datetime.utcnow()
         self.repo.update(db, user)
 
-        # Tạo JWT token
-        access_token = create_access_token(
-            data={"sub": user.username, "id": user.id, "role": user.role.value}
-        )
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user": user
-        }
+        access_token = create_access_token(data={"sub": user.username, "id": user.id, "role": user.role.value})
+        return {"access_token": access_token, "token_type": "bearer", "user": user}
+
     def get_user_by_username(self, db: Session, username: str) -> Optional[User]:
         user = self.repo.get_by_username(db, username)
         if user is None:
@@ -96,3 +89,23 @@ class AppointmentService:
         if current_user.role == UserRole.patient:
             return self.repo.get_by_patient(db, current_user.id)
         return self.repo.get_by_doctor(db, current_user.id)
+
+class SpecialtyService:
+    def __init__(self):
+        self.repo = SpecialtyRepository()
+
+    def get_specialties(self, db: Session) -> list[Specialty]:
+        return self.repo.get_active_specialties(db)
+
+    def get_specialty(self, db: Session, specialty_id: int) -> Specialty:
+        specialty = self.repo.get_active_by_id(db, specialty_id)
+        if specialty is None:
+            raise ValueError("Specialty not found")
+        return specialty
+
+    def create_specialty(self,db: Session,specialty_data: SpecialtyCreate) -> Specialty:
+        existed = self.repo.get_by_name(db, specialty_data.name)
+        if existed:
+            raise ValueError("Specialty already exists")
+        specialty = Specialty(**specialty_data.model_dump())
+        return self.repo.create(db, specialty)

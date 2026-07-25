@@ -2,76 +2,57 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.schemas import UserCreate, UserOut, Token, LoginRequest, UserResponse, AppointmentOut
-from app.services import AuthService, create_access_token, verify_password, hash_password, UserService, AppointmentService
-from app.models import User
+from app.schemas import UserCreate, UserOut, Token, LoginRequest, UserResponse, AppointmentOut, SpecialtyOut
+from app.services import AuthService, create_access_token, verify_password, hash_password, UserService, \
+    AppointmentService, SpecialtyService
+from app.models import User, UserRole
 from jose import jwt, JWTError
 from app.core import settings
+from app.dependencies import get_current_user
 
-router = APIRouter(prefix="", tags=["Authentication"])
+router = APIRouter(prefix="")
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 auth_service = AuthService()
 
-async def get_current_user(token: str = Depends(oauth2_scheme),db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM]
-        )
-    except JWTError:
-        raise credentials_exception
-    username = payload.get("sub")
-    if username is None:
-        raise credentials_exception
-    user = auth_service.get_user_by_username(db, username)
-    if user is None:
-        raise credentials_exception
-    return user
-
-@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post("/register", tags=["Authentication"], response_model=UserOut, status_code=201)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
-
     try:
-        user = auth_service.register(db, user_data)
-        return user
+        return auth_service.register(db, user_data)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/login", response_model=Token)
+@router.post("/login", tags=["Authentication"], response_model=Token)
 def login(login_data: LoginRequest, db: Session = Depends(get_db)):
-    result = auth_service.login(db, login_data.username, login_data.password)
-    if not result:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    user_out = UserOut.model_validate(result["user"])
-    return Token(
-        access_token=result["access_token"],
-        token_type=result["token_type"],
-        user=user_out
-    )
+    try:
+        result = auth_service.login(db, login_data.username, login_data.password)
+        user_out = UserOut.model_validate(result["user"])
+        return Token(access_token=result["access_token"], token_type=result["token_type"], user=user_out)
+    except ValueError as e:
+        if str(e) == "Invalid username or password":
+            raise HTTPException(status_code=401,detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
 
 user_service = UserService()
 
-@router.get("/users/me", response_model=UserResponse)
+@router.get("/users/me", tags=["Users"], response_model=UserResponse)
 def get_my_profile(current_user: User = Depends(get_current_user)):
     return user_service.get_profile(current_user)
 
 appointment_service = AppointmentService()
 
-@router.get("/users/me/appointments", response_model=list[AppointmentOut])
+@router.get("/users/me/appointments", tags=["Appointments"], response_model=list[AppointmentOut])
 async def get_my_appointments(db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
     return appointment_service.get_user_appointments(db, current_user)
 
+specialty_service = SpecialtyService()
+
+@router.get("/specialties", tags=["Specialties"], response_model=list[SpecialtyOut])
+def get_specialties(db: Session = Depends(get_db)):
+    return specialty_service.get_specialties(db)
+
+@router.get("/specialties/{specialty_id}", tags=["Specialties"], response_model=SpecialtyOut)
+def get_specialty(specialty_id: int, db: Session = Depends(get_db)):
+    try:
+        return specialty_service.get_specialty(db, specialty_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

@@ -144,7 +144,7 @@ class SpecialtyBase(BaseModel):
     location: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
-    work_hours: Optional[str] = None
+    working_hours: Optional[str] = None
     status: Optional[str] = "active"
 
 class SpecialtyCreate(SpecialtyBase):

@@ -1,4 +1,7 @@
 from typing import Generic, TypeVar, Type, Optional
+
+from dns import name
+
 from app.database import Base
 from sqlalchemy.orm import Session
 from app.models import User, Patient, Doctor, Specialty, Schedule, Medicine, Prescription, PrescriptionDetail, \
@@ -80,6 +83,12 @@ class SpecialtyRepository(BaseRepository[Specialty]):
 
     def get_by_name(self, db: Session, name:str) -> Optional[Specialty]:
         return db.query(Specialty).filter(Specialty.name == name).first()
+
+    def get_active_specialties(self,db: Session) -> list[Specialty]:
+        return db.query(Specialty).filter(Specialty.status == "active").order_by(Specialty.name).all()
+
+    def get_active_by_id(self, db: Session, specialty_id: int) -> Optional[Specialty]:
+        return db.query(Specialty).filter(Specialty.id == specialty_id, Specialty.status == "active").first()
 
 class ScheduleRepository(BaseRepository[Schedule]):
     def __init__(self):
