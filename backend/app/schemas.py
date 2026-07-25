@@ -54,6 +54,14 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True
 
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: EmailStr
+
+    class Config:
+        from_attributes = True
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -88,8 +96,8 @@ class PatientUpdate(BaseModel):
 
 class PatientOut(PatientBase):
     id: int
-    created_at: datetime
-    updated_at: Optional[datetime] = None
+    created_date: datetime
+    updated_date: Optional[datetime] = None
     user_id: Optional[UserOut] = None
 
     class Config:
@@ -122,8 +130,8 @@ class DoctorUpdate(DoctorBase):
 
 class DoctorOut(DoctorBase):
     id: int
-    created_at: datetime
-    updated_at: Optional[datetime] = None
+    created_date: datetime
+    updated_date: Optional[datetime] = None
     user: Optional[UserOut] = None
     specialty: Optional[int] = None
 
@@ -153,8 +161,8 @@ class SpecialtyUpdate(BaseModel):
 
 class SpecialtyOut(SpecialtyBase):
     id: int
-    created_at: datetime
-    updated_at: Optional[datetime] = None
+    created_date: datetime
+    updated_date: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -180,8 +188,8 @@ class ScheduleUpdate(BaseModel):
 
 class ScheduleOut(ScheduleBase):
     id: int
-    created_at: datetime
-    updated_at: Optional[datetime] = None
+    created_date: datetime
+    updated_date: Optional[datetime] = None
     doctor: Optional[DoctorOut] = None
 
     class Config:
@@ -212,7 +220,7 @@ class AppointmentUpdate(AppointmentBase):
 
 class AppointmentOut(AppointmentBase):
     id: int
-    created_at: datetime
+    created_date: datetime
     patient: Optional[PatientOut] = None
     doctor: Optional[DoctorOut] = None
     schedule: Optional[ScheduleOut] = None
@@ -240,8 +248,8 @@ class MedicalRecordUpdate(BaseModel):
 
 class MedicalRecordOut(MedicalRecordBase):
     id: int
-    created_at: datetime
-    updated_at: Optional[datetime] = None
+    created_date: datetime
+    updated_date: Optional[datetime] = None
     patient: Optional[PatientOut] = None
 
     class Config:
