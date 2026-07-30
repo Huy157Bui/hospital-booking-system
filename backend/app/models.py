@@ -14,6 +14,25 @@ class Gender(str, enum.Enum):
     male = "male"
     female = "female"
 
+class AppointmentStatus(str, Enum):
+    pending="pending"
+    confirmed="confirmed"
+    checking_in="checking_in"
+    examining="examining"
+    completed="completed"
+    paid="paid"
+    cancelled="cancelled"
+
+class ScheduleStatus(str, Enum):
+    OPEN = "open"
+    CLOSED = "closed"
+    CANCELLED = "cancelled"
+
+class ScheduleSlotStatus(str, Enum):
+    AVAILABLE = "available"
+    BOOKED = "booked"
+    BLOCKED = "blocked"
+
 class User(Base):
     __tablename__ = "users"
 
@@ -37,7 +56,7 @@ class Patient(Base):
     __tablename__ = "patients"
 
     id = Column(Integer, ForeignKey("users.id"), primary_key=True)
-    date_of_birth = Column(DateTime, nullable=True)
+    date_of_birth = Column(Date, nullable=True)
     gender = Column(Enum(Gender), nullable=False, default=Gender.female)
     address = Column(String(500), nullable=True)
     identity_number = Column(String(50), nullable=True, unique=True)
@@ -74,7 +93,6 @@ class Doctor(Base):
     specialty = relationship("Specialty", back_populates="doctors", uselist=False)
     # 1-n
     schedules = relationship("Schedule", back_populates="doctor", uselist=True)
-    appointments = relationship("Appointment", back_populates="doctor",uselist=True)
     examinations = relationship("Examination", back_populates="doctor", uselist=True)
 
 class Specialty(Base):
@@ -99,32 +117,44 @@ class Schedule(Base):
     id = Column(Integer, primary_key=True)
     doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     work_date = Column(Date, nullable=False)
-    start_date = Column(Time, nullable=False)
-    end_date = Column(Time, nullable=False)
-    max_patients = Column(Integer, nullable=False, default=10)
-    status = Column(String(50), nullable=False, default="available")
+    status = Column(Enum(ScheduleStatus), nullable = False, default= ScheduleStatus.OPEN)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
     # n-1
     doctor = relationship("Doctor", back_populates="schedules", uselist=False)
+
+    slots = relationship("ScheduleSlot",back_populates="schedule")
+
+class ScheduleSlot(Base):
+    __tablename__ = "schedule_slots"
+
+    id = Column(Integer, primary_key=True)
+    schedule_id = Column(Integer,ForeignKey("schedules.id"),nullable=False)
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+    status = Column(Enum(ScheduleSlotStatus), default=ScheduleSlotStatus.AVAILABLE)
+    created_date = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
+
+    schedule = relationship("Schedule",back_populates="slots")
+
+    appointment = relationship("Appointment",back_populates="slot",uselist=False)
 
 class Appointment(Base):
     __tablename__ = "appointments"
 
     id = Column(Integer, primary_key=True)
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
-    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)
-    schedule_id = Column(Integer, ForeignKey("schedules.id"), nullable=False)
-    appointment_date = Column(DateTime, server_default=func.now(), nullable=False)
+    slot_id = Column(Integer, ForeignKey("schedule_slots.id"), nullable=False)
+    booked_at = Column(DateTime, server_default=func.now(), nullable=False)
     reason = Column(String(500), nullable=True)
     note = Column(String(500), nullable=True)
-    cancel_reason = Column(String(500), nullable=False)
-    status = Column(String(50), nullable=False, default="pending")
+    cancel_reason = Column(String(500), nullable=True)
+    status = Column(Enum(AppointmentStatus), nullable=False, default=AppointmentStatus.pending)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     # n-1
     patient = relationship("Patient", back_populates="appointments", uselist=False)
-    doctor = relationship("Doctor", back_populates="appointments", uselist=False)
-    schedule = relationship("Schedule")  # (hiện tại không có back_populates từ Schedule, dùng backref nếu cần)
+    slot = relationship("ScheduleSlot",back_populates="appointment",uselist=False)
     # 1-1
     examination = relationship("Examination", back_populates="appointment", uselist=False)
 
