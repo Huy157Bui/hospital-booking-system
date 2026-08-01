@@ -1,37 +1,57 @@
-from sqlalchemy import (Column, Integer, String, Boolean, DateTime, Enum,
-                        ForeignKey, Float, Numeric, Time, Date, SmallInteger)
+import enum
+
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    Numeric,
+    SmallInteger,
+    String,
+    Time,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from app.base import Base
-import enum
+
 
 class UserRole(str, enum.Enum):
     patient = "patient"
     doctor = "doctor"
     admin = "admin"
 
+
 class Gender(str, enum.Enum):
     male = "male"
     female = "female"
 
+
 class AppointmentStatus(str, Enum):
-    pending="pending"
-    confirmed="confirmed"
-    checking_in="checking_in"
-    examining="examining"
-    completed="completed"
-    paid="paid"
-    cancelled="cancelled"
+    pending = "pending"
+    confirmed = "confirmed"
+    checking_in = "checking_in"
+    examining = "examining"
+    completed = "completed"
+    paid = "paid"
+    cancelled = "cancelled"
+
 
 class ScheduleStatus(str, Enum):
     OPEN = "open"
     CLOSED = "closed"
     CANCELLED = "cancelled"
 
+
 class ScheduleSlotStatus(str, Enum):
     AVAILABLE = "available"
     BOOKED = "booked"
     BLOCKED = "blocked"
+
 
 class User(Base):
     __tablename__ = "users"
@@ -52,6 +72,7 @@ class User(Base):
     patient = relationship("Patient", back_populates="user", uselist=False)
     doctor = relationship("Doctor", back_populates="user", uselist=False)
 
+
 class Patient(Base):
     __tablename__ = "patients"
 
@@ -67,11 +88,16 @@ class Patient(Base):
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
     # 1-1
-    user = relationship("User", back_populates="patient", uselist=False) # có khóa ngoại mặc định là false
+    user = relationship(
+        "User", back_populates="patient", uselist=False
+    )  # có khóa ngoại mặc định là false
     # 1-n
     appointments = relationship("Appointment", back_populates="patient", uselist=True)
-    medical_record = relationship("MedicalRecord", back_populates="patient", uselist=False)
-    examinations =relationship("Examination", back_populates="patient", uselist=True)
+    medical_record = relationship(
+        "MedicalRecord", back_populates="patient", uselist=False
+    )
+    examinations = relationship("Examination", back_populates="patient", uselist=True)
+
 
 class Doctor(Base):
     __tablename__ = "doctors"
@@ -81,19 +107,20 @@ class Doctor(Base):
     degree = Column(String(50), nullable=True)
     experience_year = Column(Integer, nullable=True)
     rate = Column(Float, nullable=True, default=0)
-    consultation_fee = Column(Numeric(10,2), nullable=False, default=0)
+    consultation_fee = Column(Numeric(10, 2), nullable=False, default=0)
     biography = Column(String(500), nullable=True)
     license_number = Column(String(50), nullable=False, unique=True)
     status = Column(String(50), nullable=False, default="active")
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
     # 1-1
-    user=relationship("User", back_populates="doctor", uselist=False)
+    user = relationship("User", back_populates="doctor", uselist=False)
     # n-1
     specialty = relationship("Specialty", back_populates="doctors", uselist=False)
     # 1-n
     schedules = relationship("Schedule", back_populates="doctor", uselist=True)
     examinations = relationship("Examination", back_populates="doctor", uselist=True)
+
 
 class Specialty(Base):
     __tablename__ = "specialties"
@@ -111,34 +138,37 @@ class Specialty(Base):
     # 1-n
     doctors = relationship("Doctor", back_populates="specialty", uselist=True)
 
+
 class Schedule(Base):
     __tablename__ = "schedules"
 
     id = Column(Integer, primary_key=True)
     doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     work_date = Column(Date, nullable=False)
-    status = Column(Enum(ScheduleStatus), nullable = False, default= ScheduleStatus.OPEN)
+    status = Column(Enum(ScheduleStatus), nullable=False, default=ScheduleStatus.OPEN)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
     # n-1
     doctor = relationship("Doctor", back_populates="schedules", uselist=False)
 
-    slots = relationship("ScheduleSlot",back_populates="schedule")
+    slots = relationship("ScheduleSlot", back_populates="schedule")
+
 
 class ScheduleSlot(Base):
     __tablename__ = "schedule_slots"
 
     id = Column(Integer, primary_key=True)
-    schedule_id = Column(Integer,ForeignKey("schedules.id"),nullable=False)
+    schedule_id = Column(Integer, ForeignKey("schedules.id"), nullable=False)
     start_time = Column(Time, nullable=False)
     end_time = Column(Time, nullable=False)
     status = Column(Enum(ScheduleSlotStatus), default=ScheduleSlotStatus.AVAILABLE)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
 
-    schedule = relationship("Schedule",back_populates="slots")
+    schedule = relationship("Schedule", back_populates="slots")
 
-    appointment = relationship("Appointment",back_populates="slot",uselist=False)
+    appointment = relationship("Appointment", back_populates="slot", uselist=False)
+
 
 class Appointment(Base):
     __tablename__ = "appointments"
@@ -150,13 +180,18 @@ class Appointment(Base):
     reason = Column(String(500), nullable=True)
     note = Column(String(500), nullable=True)
     cancel_reason = Column(String(500), nullable=True)
-    status = Column(Enum(AppointmentStatus), nullable=False, default=AppointmentStatus.pending)
+    status = Column(
+        Enum(AppointmentStatus), nullable=False, default=AppointmentStatus.pending
+    )
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     # n-1
     patient = relationship("Patient", back_populates="appointments", uselist=False)
-    slot = relationship("ScheduleSlot",back_populates="appointment",uselist=False)
+    slot = relationship("ScheduleSlot", back_populates="appointment", uselist=False)
     # 1-1
-    examination = relationship("Examination", back_populates="appointment", uselist=False)
+    examination = relationship(
+        "Examination", back_populates="appointment", uselist=False
+    )
+
 
 class MedicalRecord(Base):
     __tablename__ = "medical_records"
@@ -173,14 +208,21 @@ class MedicalRecord(Base):
     # 1-1
     patient = relationship("Patient", back_populates="medical_record", uselist=False)
     # 1-n
-    examinations = relationship("Examination", back_populates="medical_record", uselist=True)
+    examinations = relationship(
+        "Examination", back_populates="medical_record", uselist=True
+    )
+
 
 class Examination(Base):
     __tablename__ = "examinations"
 
     id = Column(Integer, primary_key=True)
-    appointment_id = Column(Integer, ForeignKey("appointments.id"), unique=True, nullable=False)
-    medical_record_id = Column(Integer, ForeignKey("medical_records.id"), nullable=False)
+    appointment_id = Column(
+        Integer, ForeignKey("appointments.id"), unique=True, nullable=False
+    )
+    medical_record_id = Column(
+        Integer, ForeignKey("medical_records.id"), nullable=False
+    )
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
     doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=False)
     symptom = Column(String(500), nullable=True)
@@ -199,13 +241,19 @@ class Examination(Base):
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
 
     # 1-1
-    appointment = relationship("Appointment", back_populates="examination", uselist=False)
+    appointment = relationship(
+        "Appointment", back_populates="examination", uselist=False
+    )
     # n-1
-    medical_record = relationship("MedicalRecord", back_populates="examinations", uselist=False)
+    medical_record = relationship(
+        "MedicalRecord", back_populates="examinations", uselist=False
+    )
     patient = relationship("Patient", back_populates="examinations", uselist=False)
     doctor = relationship("Doctor", back_populates="examinations", uselist=False)
     # 1-n
-    prescriptions = relationship("Prescription", back_populates="examination", uselist=True)
+    prescriptions = relationship(
+        "Prescription", back_populates="examination", uselist=True
+    )
 
 
 class Prescription(Base):
@@ -215,15 +263,18 @@ class Prescription(Base):
     examination_id = Column(Integer, ForeignKey("examinations.id"), nullable=False)
     prescription_type = Column(SmallInteger, nullable=False)
     note = Column(String(500), nullable=True)
-    total_amount = Column(Numeric(12,2), nullable=False, default=0)
+    total_amount = Column(Numeric(12, 2), nullable=False, default=0)
     status = Column(SmallInteger, nullable=False, default=0)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
     # n-1
-    examination = relationship("Examination", back_populates="prescriptions", uselist=False)
+    examination = relationship(
+        "Examination", back_populates="prescriptions", uselist=False
+    )
     # 1-n
-    prescription_details = relationship("PrescriptionDetail", back_populates="prescription", uselist=True)
-    
+    prescription_details = relationship(
+        "PrescriptionDetail", back_populates="prescription", uselist=True
+    )
 
 
 class Medicine(Base):
@@ -242,7 +293,9 @@ class Medicine(Base):
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
     # 1-n
-    prescription_details = relationship("PrescriptionDetail", back_populates="medicine",uselist=True)
+    prescription_details = relationship(
+        "PrescriptionDetail", back_populates="medicine", uselist=True
+    )
 
 
 class PrescriptionDetail(Base):
@@ -260,5 +313,9 @@ class PrescriptionDetail(Base):
     instruction = Column(String(500), nullable=True)
     subtotal = Column(Numeric(12, 2), nullable=False)
     # n-1
-    prescription = relationship("Prescription", back_populates="prescription_details", uselist=False)
-    medicine = relationship("Medicine", back_populates="prescription_details", uselist=False)
+    prescription = relationship(
+        "Prescription", back_populates="prescription_details", uselist=False
+    )
+    medicine = relationship(
+        "Medicine", back_populates="prescription_details", uselist=False
+    )
