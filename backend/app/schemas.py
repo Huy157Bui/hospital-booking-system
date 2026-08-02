@@ -37,7 +37,6 @@ class UserCreate(UserBase):
         return v
 
 
-# Update nên là partial update
 class UserUpdate(BaseModel):
     username: str | None = None
     email: EmailStr | None = None
@@ -474,7 +473,6 @@ class MedicineOut(MedicineBase):
         from_attributes = True
 
 
-# chứa forward reference
 DoctorOut.model_rebuild()
 
 DoctorScheduleOut.model_rebuild()

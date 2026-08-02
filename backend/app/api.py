@@ -8,7 +8,7 @@ from app.dependencies import (
     get_current_user,
     get_owned_schedule_slot,
 )
-from app.models import Patient, ScheduleSlot, User
+from app.models import Patient, ScheduleSlot, User, Doctor
 from app.schemas import (
     AppointmentCancel,
     AppointmentCreate,
@@ -23,7 +23,7 @@ from app.schemas import (
     SpecialtyOut,
     Token,
     UserCreate,
-    UserOut,
+    UserOut, AppointmentStatusUpdate,
 )
 from app.services import (
     AppointmentService,
@@ -93,7 +93,7 @@ async def create_appointment(
     return await appointment_service.create_appointment(db, patient, appointment_data)
 
 
-@router.get("/{appointment_id}", response_model=AppointmentOut)
+@router.get("/appointments/{appointment_id}", response_model=AppointmentOut)
 async def get_appointment_detail(
     appointment_id: int,
     db: AsyncSession = Depends(get_db),
@@ -104,7 +104,7 @@ async def get_appointment_detail(
     )
 
 
-@router.patch("/{appointment_id}/cancel", response_model=AppointmentOut)
+@router.patch("/appointments/{appointment_id}/cancel", response_model=AppointmentOut)
 async def cancel_appointment(
     appointment_id: int,
     cancel_data: AppointmentCancel,
@@ -115,9 +115,16 @@ async def cancel_appointment(
         db, appointment_id, current_user, cancel_data
     )
 
+@router.patch('/appointments/{appointment_id}/status', response_model=AppointmentOut)
+async def update_appointment_status(
+    appointment_id: int,
+    status_update: AppointmentStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    doctor: Doctor = Depends(get_current_doctor),
+):
+    return await appointment_service.update_appointment_status(db, appointment_id, status_update.status, doctor)
 
 specialty_service = SpecialtyService()
-
 
 @router.get("/specialties", tags=["Specialties"], response_model=list[SpecialtyOut])
 async def get_specialties(db: AsyncSession = Depends(get_db)):

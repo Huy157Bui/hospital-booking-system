@@ -209,6 +209,55 @@ class AppointmentService:
 
         return await self.repo.cancel(db, appointment, cancel_data.cancel_reason)
 
+    async def update_appointment_status(
+        self,
+        db: AsyncSession,
+        appointment_id: int,
+        new_status: AppointmentStatus,
+        current_user: User,
+        doctor: Doctor,
+    ) -> Appointment:
+
+        appointment = await self.repo.get_by_id_with_slot(db, appointment_id)
+        if not appointment:
+            raise ValueError("Appointment not found")
+
+        if appointment.slot.schedule.doctor_id != doctor.id:
+            raise ValueError("You are not the doctor assigned to this appointment")
+
+        current_status = appointment.status
+        if current_status in (
+            AppointmentStatus.CANCELLED,
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.PAID,
+        ):
+            raise ValueError(f"Cannot change status from {appointment.status.value}")
+
+        valid_transitions = {
+            AppointmentStatus.PENDING: [
+                AppointmentStatus.CHECKING_IN,
+                AppointmentStatus.EXAMINING,
+            ],
+            AppointmentStatus.CONFIRMED: [
+                AppointmentStatus.CHECKING_IN,
+                AppointmentStatus.EXAMINING,
+            ],
+            AppointmentStatus.CHECKING_IN: [
+                AppointmentStatus.EXAMINING,
+                AppointmentStatus.COMPLETED,
+            ],
+            AppointmentStatus.EXAMINING: [AppointmentStatus.COMPLETED],
+        }
+        allowed = valid_transitions.get(current_status, [])
+        if new_status not in allowed:
+            raise ValueError(
+                f"Can only transition from {current_status.value} to one of {[s.value for s in allowed]}"
+            )
+        await self.repo.update_status(db, appointment, new_status)
+        updated = await self.repo.get_by_id_with_relations(db, appointment_id)
+        if not updated:
+            raise ValueError("Appointment not found after update")
+        return updated
 
 class SpecialtyService:
     def __init__(self):

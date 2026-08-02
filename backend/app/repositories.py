@@ -362,6 +362,14 @@ class AppointmentRepository(BaseRepository[Appointment]):
         await db.refresh(appointment)
         return appointment
 
+    async def update_status(
+        self, db: AsyncSession, appointment: Appointment, new_status: AppointmentStatus
+    ) -> Appointment:
+        appointment.status = new_status
+        await db.commit()
+        await db.refresh(appointment)
+        return appointment
+
 
 class MedicalRecordRepository(BaseRepository[MedicalRecord]):
     def __init__(self):
