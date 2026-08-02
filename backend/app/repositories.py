@@ -293,6 +293,15 @@ class ScheduleSlotRepository(BaseRepository[ScheduleSlot]):
         )
         return result.scalar_one_or_none()
 
+    async def get_available_slots_by_doctor_and_date(self, db: AsyncSession, doctor_id: int, date: date) -> list[ScheduleSlot]:
+        statement = select(ScheduleSlot).join(Schedule).where(
+            Schedule.doctor_id == doctor_id,
+            Schedule.date == date,
+            Schedule.status == ScheduleSlotStatus.AVAILABLE,
+        ).order_by(ScheduleSlot.start_time)
+        result = await db.execute(statement)
+        return list(result.scalars().all())
+
 
 class AppointmentRepository(BaseRepository[Appointment]):
     def __init__(self):

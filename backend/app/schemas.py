@@ -208,6 +208,9 @@ class ScheduleSlotOut(ScheduleSlotBase):
     id: int
     created_date: datetime
     updated_date: datetime | None = None
+    start_time: datetime
+    end_time: datetime
+    schedule_id: int
     # appointment: Optional["AppointmentOut"] = None
 
     class Config:

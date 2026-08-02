@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, date
 
 from jose import jwt
 from passlib.context import CryptContext
@@ -258,6 +258,10 @@ class AppointmentService:
         if not updated:
             raise ValueError("Appointment not found after update")
         return updated
+
+    async def get_avaible_slots(self, db: AsyncSession, doctor_id: int, date: date) -> list[ScheduleSlot]:
+        slots = await self.slot_repo.get_available_slots_by_doctor_and_date(db, doctor_id, date)
+        return slots
 
 class SpecialtyService:
     def __init__(self):
