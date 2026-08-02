@@ -1,13 +1,15 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
-from app.database import engine, Base
-from app.api import router
+
 from app.admin import router as admin_router
+from app.api import router
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
     yield
+
 
 app = FastAPI(lifespan=lifespan)
 

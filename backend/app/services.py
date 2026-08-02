@@ -2,11 +2,12 @@ from datetime import UTC, datetime, timedelta
 
 from jose import jwt
 from passlib.context import CryptContext
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import settings
 from app.models import (
     Appointment,
+    AppointmentStatus,
     Doctor,
     Patient,
     ScheduleSlot,
@@ -25,6 +26,7 @@ from app.repositories import (
     UserRepository,
 )
 from app.schemas import (
+    AppointmentCancel,
     AppointmentCreate,
     DoctorCreate,
     ScheduleSlotUpdate,
@@ -57,10 +59,10 @@ class AuthService:
     def __init__(self):
         self.repo = UserRepository()
 
-    def register(self, db: Session, user_data: UserCreate) -> User:
-        if self.repo.get_by_username(db, user_data.username):
+    async def register(self, db: AsyncSession, user_data: UserCreate) -> User:
+        if await self.repo.get_by_username(db, user_data.username):
             raise ValueError("Username already exists")
-        if self.repo.get_by_email(db, user_data.email):
+        if await self.repo.get_by_email(db, user_data.email):
             raise ValueError("Email already exists")
 
         hashed_password = hash_password(user_data.password)
@@ -74,41 +76,47 @@ class AuthService:
             is_active=True,
             password=hashed_password,
         )
-        return self.repo.create(db, user)
+        return await self.repo.create(db, user)
 
-    def authenticate(self, db: Session, username: str, password: str) -> User | None:
-        user = self.repo.get_by_username(db, username)
+    async def authenticate(
+        self, db: AsyncSession, username: str, password: str
+    ) -> User | None:
+        user = await self.repo.get_by_username(db, username)
         if not user:
             return None
         if not verify_password(password, user.password):
             return None
         return user
 
-    def login(self, db: Session, username: str, password: str) -> dict | None:
-        user = self.authenticate(db, username, password)
+    async def login(
+        self, db: AsyncSession, username: str, password: str
+    ) -> dict | None:
+        user = await self.authenticate(db, username, password)
         if not user:
             raise ValueError("Invalid username or password")
         if not user.is_active:
             raise ValueError("Account is inactive")
 
         user.last_login = datetime.now(UTC)
-        self.repo.update(db, user)
+        await self.repo.update(db, user)
 
         access_token = create_access_token(
             data={"sub": user.username, "id": user.id, "role": user.role.value}
         )
         return {"access_token": access_token, "token_type": "bearer", "user": user}
 
-    def get_user_by_username(self, db: Session, username: str) -> User | None:
-        user = self.repo.get_by_username(db, username)
+    async def get_user_by_username(
+        self, db: AsyncSession, username: str
+    ) -> User | None:
+        user = await self.repo.get_by_username(db, username)
         if user is None:
             return None
         if not user.is_active:
             return None
         return user
 
-    def get_user_by_id(self, db: Session, user_id: int) -> User | None:
-        user = self.repo.get_by_id(db, user_id)
+    async def get_user_by_id(self, db: AsyncSession, user_id: int) -> User | None:
+        user = await self.repo.get_by_id(db, user_id)
         if user is None:
             return None
         if not user.is_active:
@@ -131,53 +139,75 @@ class AppointmentService:
         self.doctor_repo = DoctorRepository()
         self.patient_repo = PatientRepository()
 
-    def get_user_appointments(
-        self, db: Session, current_user: User
+    async def get_user_appointments(
+        self, db: AsyncSession, current_user: User
     ) -> list[Appointment]:
         if current_user.role == UserRole.patient:
-            return self.repo.get_by_patient(db, current_user.id)
-        return self.repo.get_by_doctor(db, current_user.id)
+            return await self.repo.get_by_patient(db, current_user.id)
+        return await self.repo.get_by_doctor(db, current_user.id)
 
-    def create_appointment(
+    async def create_appointment(
         self,
-        db: Session,
+        db: AsyncSession,
         patient: Patient,
         appointment_data: AppointmentCreate,
     ):
-        slot = self.slot_repo.get_by_id(
-            db,
-            appointment_data.slot_id,
-        )
+        slot = await self.slot_repo.get_by_id(db, appointment_data.slot_id)
         if slot is None:
             raise ValueError("Schedule slot not found")
         if slot.status != ScheduleSlotStatus.AVAILABLE:
             raise ValueError("Schedule slot is unavailable")
         if slot.appointment is not None:
             raise ValueError("Schedule slot has already been booked")
-        appointment = self.repo.get_by_slot_id(db, appointment_data.slot_id)
-        if appointment is not None:
+        existing = await self.repo.get_by_slot_id(db, appointment_data.slot_id)
+        if existing is not None:
             raise ValueError("Schedule slot has already been booked")
 
-    def get_appointment_detail(
-        self, db: Session, appointment_id: int, current_user: User
+    async def get_appointment_detail(
+        self, db: AsyncSession, appointment_id: int, current_user: User
     ):
-        appointment = self.repo.get_by_id_with_relations(db, appointment_id)
+        appointment = await self.repo.get_by_id_with_relations(db, appointment_id)
         if not appointment:
             raise ValueError("Appointment not found")
         if current_user.role == UserRole.admin:
             return appointment
         if current_user.role == UserRole.patient:
-            patient = self.patient_repo.get_by_user_id(db, current_user.id)
+            patient = await self.patient_repo.get_by_user_id(db, current_user.id)
             if not patient or appointment.patient_id != patient.id:
                 raise ValueError("Access denied")
             return appointment
         if current_user.role == UserRole.doctor:
-            doctor = self.doctor_repo.get_by_user_id(db, current_user.id)
+            doctor = await self.doctor_repo.get_by_user_id(db, current_user.id)
             if not doctor or appointment.slot.schedule.doctor_id != doctor.id:
                 raise ValueError("Access denied")
             return appointment
 
         raise ValueError("Invalid role")
+
+    async def cancel_appointment(
+        self,
+        db: AsyncSession,
+        appointment_id: int,
+        current_user: User,
+        cancel_data: AppointmentCancel,
+    ):
+        appointment = await self.repo.get_by_id_with_slot(db, appointment_id)
+        if not appointment:
+            raise ValueError("Appointment not found")
+
+        if current_user.role != UserRole.admin:
+            if current_user.role != UserRole.patient:
+                raise ValueError("Access denied")
+            patient = await self.patient_repo.get_by_user_id(db, current_user.id)
+            if not patient or appointment.patient_id != patient.id:
+                raise ValueError("Access denied")
+
+        if appointment.status == AppointmentStatus.CANCELLED:
+            raise ValueError("Appointment is already cancelled")
+        if appointment.status == AppointmentStatus.COMPLETED:
+            raise ValueError("Cannot cancel a completed appointment")
+
+        return await self.repo.cancel(db, appointment, cancel_data.cancel_reason)
 
 
 class SpecialtyService:
@@ -185,46 +215,47 @@ class SpecialtyService:
         self.repo = SpecialtyRepository()
         self.doctor_repo = DoctorRepository()
 
-    def get_specialties(self, db: Session) -> list[Specialty]:
-        return self.repo.get_active_specialties(db)
+    async def get_specialties(self, db: AsyncSession) -> list[Specialty]:
+        return await self.repo.get_active_specialties(db)
 
-    def get_specialty(self, db: Session, specialty_id: int) -> Specialty:
-        specialty = self.repo.get_active_by_id(db, specialty_id)
+    async def get_specialty(self, db: AsyncSession, specialty_id: int) -> Specialty:
+        specialty = await self.repo.get_active_by_id(db, specialty_id)
         if specialty is None:
             raise ValueError("Specialty not found")
         return specialty
 
-    # tao chuyen khoa
-    def create_specialty(
-        self, db: Session, specialty_data: SpecialtyCreate
+    async def create_specialty(
+        self, db: AsyncSession, specialty_data: SpecialtyCreate
     ) -> Specialty:
-        existed = self.repo.get_by_name(db, specialty_data.name)
+        existed = await self.repo.get_by_name(db, specialty_data.name)
         if existed:
             raise ValueError("Specialty already exists")
         specialty = Specialty(**specialty_data.model_dump())
-        return self.repo.create(db, specialty)
+        return await self.repo.create(db, specialty)
 
-    def toggle_specialty_status(self, db: Session, specialty_id: int) -> Specialty:
-        specialty = self.repo.get_by_id(db, specialty_id)
+    async def toggle_specialty_status(
+        self, db: AsyncSession, specialty_id: int
+    ) -> Specialty:
+        specialty = await self.repo.get_by_id(db, specialty_id)
         if specialty is None:
             raise ValueError("Specialty not found")
-        return self.repo.toggle_status(db, specialty)
+        return await self.repo.toggle_status(db, specialty)
 
-    def update_specialty(
-        self, db: Session, specialty_id: int, specialty_data: SpecialtyUpdate
+    async def update_specialty(
+        self, db: AsyncSession, specialty_id: int, specialty_data: SpecialtyUpdate
     ) -> Specialty:
-        specialty = self.repo.get_active_by_id(db, specialty_id)
+        specialty = await self.repo.get_active_by_id(db, specialty_id)
         if specialty is None:
             raise ValueError("Specialty not found")
         if specialty_data.name and specialty_data.name != specialty.name:
-            existed = self.repo.get_by_name(db, specialty_data.name)
+            existed = await self.repo.get_by_name(db, specialty_data.name)
             if existed:
                 raise ValueError("Specialty already exists")
 
         update_data = specialty_data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(specialty, field, value)
-        return self.repo.update(db, specialty)
+        return await self.repo.update(db, specialty)
 
 
 class DoctorService:
@@ -236,27 +267,29 @@ class DoctorService:
         self.appointment_repo = AppointmentRepository()
         self.slot_repo = ScheduleSlotRepository()
 
-    def get_doctors(self, db: Session, specialty_id: int | None = None) -> list[Doctor]:
+    async def get_doctors(
+        self, db: AsyncSession, specialty_id: int | None = None
+    ) -> list[Doctor]:
         if specialty_id is None:
-            return self.repo.get_active_doctors(db)
-        return self.repo.get_by_specialty(db, specialty_id)
+            return await self.repo.get_active_doctors(db)
+        return await self.repo.get_by_specialty(db, specialty_id)
 
-    def get_doctor(self, db: Session, doctor_id: int) -> Doctor:
-        doctor = self.repo.get_active_by_id(db, doctor_id)
+    async def get_doctor(self, db: AsyncSession, doctor_id: int) -> Doctor:
+        doctor = await self.repo.get_active_by_id(db, doctor_id)
         if doctor is None:
             raise ValueError("Doctor not found")
         return doctor
 
-    def get_doctor_schedule(self, db: Session, doctor_id: int):
-        doctor = self.repo.get_active_by_id(db, doctor_id)
+    async def get_doctor_schedule(self, db: AsyncSession, doctor_id: int):
+        doctor = await self.repo.get_active_by_id(db, doctor_id)
         if doctor is None:
             raise ValueError("Doctor not found")
-        schedules = self.schedule_repo.get_by_doctor(db, doctor_id)
+        schedules = await self.schedule_repo.get_by_doctor(db, doctor_id)
         return schedules
 
-    def update_my_schedule_slot(
+    async def update_my_schedule_slot(
         self,
-        db: Session,
+        db: AsyncSession,
         slot: ScheduleSlot,
         slot_data: ScheduleSlotUpdate,
     ):
@@ -265,22 +298,24 @@ class DoctorService:
         update_data = slot_data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(slot, field, value)
-        return self.slot_repo.update(db, slot)
+        return await self.slot_repo.update(db, slot)
 
-    def create_doctor(self, db: Session, doctor_data: DoctorCreate):
-        user = self.user_repo.get_by_id(db, doctor_data.user_id)
+    async def create_doctor(self, db: AsyncSession, doctor_data: DoctorCreate):
+        user = await self.user_repo.get_by_id(db, doctor_data.user_id)
         if user is None:
             raise ValueError("User not found")
         if user.role != UserRole.doctor:
             raise ValueError("User is not a doctor")
-        if self.repo.get_by_user_id(db, doctor_data.user_id):
+        if await self.repo.get_by_user_id(db, doctor_data.user_id):
             raise ValueError("Doctor profile already exists")
-        specialty = self.specialty_repo.get_active_by_id(db, doctor_data.specialty_id)
+        specialty = await self.specialty_repo.get_active_by_id(
+            db, doctor_data.specialty_id
+        )
         if specialty is None:
             raise ValueError("Specialty not found")
-        if self.repo.get_by_license(db, doctor_data.license_number):
+        if await self.repo.get_by_license(db, doctor_data.license_number):
             raise ValueError("License already exists")
         doctor = Doctor(
             id=doctor_data.user_id, **doctor_data.model_dump(exclude={"user_id"})
         )
-        return self.repo.create(db, doctor)
+        return await self.repo.create(db, doctor)

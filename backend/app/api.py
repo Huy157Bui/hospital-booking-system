@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import (
@@ -10,6 +10,7 @@ from app.dependencies import (
 )
 from app.models import Patient, ScheduleSlot, User
 from app.schemas import (
+    AppointmentCancel,
     AppointmentCreate,
     AppointmentOut,
     DoctorOut,
@@ -40,17 +41,17 @@ auth_service = AuthService()
 @router.post(
     "/register", tags=["Authentication"], response_model=UserOut, status_code=201
 )
-def register(user_data: UserCreate, db: Session = Depends(get_db)):
+async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     try:
-        return auth_service.register(db, user_data)
+        return await auth_service.register(db, user_data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/login", tags=["Authentication"], response_model=Token)
-def login(login_data: LoginRequest, db: Session = Depends(get_db)):
+async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
     try:
-        result = auth_service.login(db, login_data.username, login_data.password)
+        result = await auth_service.login(db, login_data.username, login_data.password)
         user_out = UserOut.model_validate(result["user"])
         return Token(
             access_token=result["access_token"],
@@ -67,7 +68,7 @@ user_service = UserService()
 
 
 @router.get("/users/me", tags=["Users"], response_model=UserOut)
-def get_my_profile(current_user: User = Depends(get_current_user)):
+async def get_my_profile(current_user: User = Depends(get_current_user)):
     return user_service.get_profile(current_user)
 
 
@@ -78,43 +79,57 @@ appointment_service = AppointmentService()
     "/users/me/appointments", tags=["Appointments"], response_model=list[AppointmentOut]
 )
 async def get_my_appointments(
-    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    return appointment_service.get_user_appointments(db, current_user)
+    return await appointment_service.get_user_appointments(db, current_user)
 
 
 @router.post("/appointments", response_model=AppointmentOut, status_code=201)
-def create_appointment(
+async def create_appointment(
     appointment_data: AppointmentCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     patient: Patient = Depends(get_current_patient_profile),
 ):
-    return appointment_service.create_appointment(db, patient, appointment_data)
+    return await appointment_service.create_appointment(db, patient, appointment_data)
 
 
 @router.get("/{appointment_id}", response_model=AppointmentOut)
-def get_appointment_detail(
+async def get_appointment_detail(
     appointment_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return appointment_service.get_appointment_detail(db, appointment_id, current_user)
+    return await appointment_service.get_appointment_detail(
+        db, appointment_id, current_user
+    )
+
+
+@router.patch("/{appointment_id}/cancel", response_model=AppointmentOut)
+async def cancel_appointment(
+    appointment_id: int,
+    cancel_data: AppointmentCancel,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await appointment_service.cancel_appointment(
+        db, appointment_id, current_user, cancel_data
+    )
 
 
 specialty_service = SpecialtyService()
 
 
 @router.get("/specialties", tags=["Specialties"], response_model=list[SpecialtyOut])
-def get_specialties(db: Session = Depends(get_db)):
-    return specialty_service.get_specialties(db)
+async def get_specialties(db: AsyncSession = Depends(get_db)):
+    return await specialty_service.get_specialties(db)
 
 
 @router.get(
     "/specialties/{specialty_id}", tags=["Specialties"], response_model=SpecialtyOut
 )
-def get_specialty(specialty_id: int, db: Session = Depends(get_db)):
+async def get_specialty(specialty_id: int, db: AsyncSession = Depends(get_db)):
     try:
-        return specialty_service.get_specialty(db, specialty_id)
+        return await specialty_service.get_specialty(db, specialty_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -123,16 +138,16 @@ doctor_service = DoctorService()
 
 
 @router.get("/doctors", tags=["Doctors"], response_model=list[DoctorOut])
-def get_doctors(
-    specialty_id: int | None = None, db: Session = Depends(get_db)
-):  # query parameter
-    return doctor_service.get_doctors(db, specialty_id)
+async def get_doctors(
+    specialty_id: int | None = None, db: AsyncSession = Depends(get_db)
+):
+    return await doctor_service.get_doctors(db, specialty_id)
 
 
 @router.get("/doctors/{doctor_id}", tags=["Doctors"], response_model=DoctorOut)
-def get_doctor(doctor_id: int, db: Session = Depends(get_db)):
+async def get_doctor(doctor_id: int, db: AsyncSession = Depends(get_db)):
     try:
-        return doctor_service.get_doctor(db, doctor_id)
+        return await doctor_service.get_doctor(db, doctor_id)
     except ValueError as e:
         if str(e) == "Doctor not found":
             raise HTTPException(status_code=404, detail=str(e))
@@ -142,9 +157,9 @@ def get_doctor(doctor_id: int, db: Session = Depends(get_db)):
 @router.get(
     "/doctors/{doctor_id}/schedule", response_model=DoctorScheduleOut, tags=["Doctors"]
 )
-def get_doctor_schedule(doctor_id: int, db: Session = Depends(get_db)):
+async def get_doctor_schedule(doctor_id: int, db: AsyncSession = Depends(get_db)):
     try:
-        return doctor_service.get_doctor_schedule(db, doctor_id)
+        return await doctor_service.get_doctor_schedule(db, doctor_id)
     except ValueError as e:
         if str(e) == "Doctor not found":
             raise HTTPException(status_code=404, detail=str(e))
@@ -152,28 +167,28 @@ def get_doctor_schedule(doctor_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/doctors/me/schedule")
-def get_my_schedule(
-    db: Session = Depends(get_db), current_user: User = Depends(get_current_doctor)
+async def get_my_schedule(
+    db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_doctor)
 ):
-    return doctor_service.get_my_schedule(db, current_user)
+    return await doctor_service.get_my_schedule(db, current_user)
 
 
 @router.put("/doctors/me/schedules/{schedule_id}", response_model=ScheduleOut)
-def update_my_schedule(
+async def update_my_schedule(
     schedule_id: int,
     schedule_data: ScheduleUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     current_doctor: User = Depends(get_current_doctor),
 ):
-    return doctor_service.update_my_schedule(
+    return await doctor_service.update_my_schedule(
         db, current_doctor, schedule_id, schedule_data
     )
 
 
 @router.patch("/doctors/me/schedule-slots/{slot_id}", response_model=ScheduleSlotOut)
-def update_my_schedule_slot(
+async def update_my_schedule_slot(
     slot_data: ScheduleSlotUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     slot: ScheduleSlot = Depends(get_owned_schedule_slot),
 ):
-    return doctor_service.update_my_schedule_slot(db, slot, slot_data)
+    return await doctor_service.update_my_schedule_slot(db, slot, slot_data)

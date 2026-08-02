@@ -21,36 +21,36 @@ from app.base import Base
 
 
 class UserRole(str, enum.Enum):
-    patient = "patient"
-    doctor = "doctor"
-    admin = "admin"
+    PATIENT = "PATIENT"
+    DOCTOR = "DOCTOR"
+    ADMIN = "ADMIN"
 
 
 class Gender(str, enum.Enum):
-    male = "male"
-    female = "female"
+    MALE = "MALE"
+    FEMALE = "FEMALE"
 
 
-class AppointmentStatus(str, Enum):
-    pending = "pending"
-    confirmed = "confirmed"
-    checking_in = "checking_in"
-    examining = "examining"
-    completed = "completed"
-    paid = "paid"
-    cancelled = "cancelled"
+class AppointmentStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    CONFIRMED = "CONFIRMED"
+    CHECKING_IN = "CHECKING_IN"
+    EXAMINING = "EXAMINING"
+    COMPLETED = "COMPLETED"
+    PAID = "PAID"
+    CANCELLED = "CANCELLED"
 
 
-class ScheduleStatus(str, Enum):
-    OPEN = "open"
-    CLOSED = "closed"
-    CANCELLED = "cancelled"
+class ScheduleStatus(str, enum.Enum):
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+    CANCELLED = "CANCELLED"
 
 
-class ScheduleSlotStatus(str, Enum):
-    AVAILABLE = "available"
-    BOOKED = "booked"
-    BLOCKED = "blocked"
+class ScheduleSlotStatus(str, enum.Enum):
+    AVAILABLE = "AVAILABLE"
+    BOOKED = "BOOKED"
+    BLOCKED = "BLOCKED"
 
 
 class User(Base):
@@ -63,7 +63,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False)
     phone = Column(String(50), nullable=True)
     avatar = Column(String(500), nullable=True)
-    role = Column(Enum(UserRole), nullable=False, default=UserRole.patient)
+    role = Column(Enum(UserRole), nullable=False, default=UserRole.PATIENT)
     is_active = Column(Boolean, nullable=False, default=True)
     last_login = Column(DateTime, nullable=True)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
@@ -78,7 +78,7 @@ class Patient(Base):
 
     id = Column(Integer, ForeignKey("users.id"), primary_key=True)
     date_of_birth = Column(Date, nullable=True)
-    gender = Column(Enum(Gender), nullable=False, default=Gender.female)
+    gender = Column(Enum(Gender), nullable=False, default=Gender.FEMALE)
     address = Column(String(500), nullable=True)
     identity_number = Column(String(50), nullable=True, unique=True)
     insurance_number = Column(String(50), nullable=True)
@@ -88,9 +88,8 @@ class Patient(Base):
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
     # 1-1
-    user = relationship(
-        "User", back_populates="patient", uselist=False
-    )  # có khóa ngoại mặc định là false
+    user = relationship("User", back_populates="patient", uselist=False)
+    # có khóa ngoại mặc định là false
     # 1-n
     appointments = relationship("Appointment", back_populates="patient", uselist=True)
     medical_record = relationship(
@@ -181,7 +180,7 @@ class Appointment(Base):
     note = Column(String(500), nullable=True)
     cancel_reason = Column(String(500), nullable=True)
     status = Column(
-        Enum(AppointmentStatus), nullable=False, default=AppointmentStatus.pending
+        Enum(AppointmentStatus), nullable=False, default=AppointmentStatus.PENDING
     )
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     # n-1
