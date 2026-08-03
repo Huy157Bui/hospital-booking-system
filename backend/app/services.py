@@ -156,7 +156,7 @@ class AppointmentService:
     async def get_user_appointments(
         self, db: AsyncSession, current_user: User
     ) -> list[Appointment]:
-        if current_user.role == UserRole.patient:
+        if current_user.role == UserRole.PATIENT:
             return await self.repo.get_by_patient(db, current_user.id)
         return await self.repo.get_by_doctor(db, current_user.id)
 
@@ -503,3 +503,17 @@ class DoctorService:
             id=doctor_data.user_id, **doctor_data.model_dump(exclude={"user_id"})
         )
         return await self.repo.create(db, doctor)
+
+class PatientService:
+    def __init__(self):
+        self.repo = PatientRepository()
+        self.medical_record_repo = MedicalRecordRepository()
+        self.examination_repo = ExaminationRepository()
+
+    async def get_patient_medical_history(self, db: AsyncSession, patient_id: int) -> dict:
+        medical_record = await self.medical_record_repo.get_by_patient_id(db, patient_id)
+        examinations = await self.examination_repo.get_by_patient(db, patient_id)
+        return {
+            "medical_record": medical_record,
+            "examinations": examinations,
+        }

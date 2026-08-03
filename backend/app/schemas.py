@@ -505,6 +505,11 @@ class ExaminationRecordCreate(BaseModel):
     examined_at: datetime | None = None
     prescriptions: list[PrescriptionCreateWithoutExam] | None = None
 
+class PatientMedicalHistoryOut(BaseModel):
+    medical_record: MedicalRecordOut | None = None
+    examinations: list[ExaminationOut] = Field(default_factory=list)
+    class Config:
+        from_attributes = True
 
 DoctorOut.model_rebuild()
 

@@ -28,6 +28,7 @@ from app.schemas import (
     AppointmentStatusUpdate,
     ExaminationRecordCreate,
     ExaminationOut,
+    PatientMedicalHistoryOut,
 )
 from app.services import (
     AppointmentService,
@@ -35,6 +36,7 @@ from app.services import (
     DoctorService,
     SpecialtyService,
     UserService,
+    PatientService,
 )
 
 router = APIRouter(prefix="")
@@ -75,7 +77,21 @@ user_service = UserService()
 async def get_my_profile(current_user: User = Depends(get_current_user)):
     return user_service.get_profile(current_user)
 
+patient_service = PatientService()
 
+@router.get(
+    "/me/medical-records",
+    response_model=PatientMedicalHistoryOut,
+)
+async def get_my_medical_records(
+    db: AsyncSession = Depends(get_db),
+    patient: Patient = Depends(get_current_patient_profile),
+):
+    result = await patient_service.get_patient_medical_history(db, patient)
+    return PatientMedicalHistoryOut(
+        medical_record=result["medical_record"],
+        examinations=result["examinations"],
+    )
 appointment_service = AppointmentService()
 
 
