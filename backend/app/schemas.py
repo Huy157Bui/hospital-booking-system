@@ -78,7 +78,7 @@ class Token(BaseModel):
 
 class PatientBase(BaseModel):
     date_of_birth: date | None = None
-    gender: Gender | None = Gender.female
+    gender: Gender | None = Gender.FEMALE
     address: str | None = None
     identity_number: str | None = None
     insurance_number: str | None = None
@@ -93,7 +93,7 @@ class PatientCreate(PatientBase):
 
 class PatientUpdate(BaseModel):
     date_of_birth: date | None = None
-    gender: Gender | None = Gender.female
+    gender: Gender | None = Gender.FEMALE
     address: str | None = None
     identity_number: str | None = Field(None, max_length=50)
     insurance_number: str | None = Field(None, max_length=50)
@@ -474,6 +474,36 @@ class MedicineOut(MedicineBase):
 
     class Config:
         from_attributes = True
+
+class PrescriptionItemCreate(BaseModel):
+    medicine_id: int
+    quantity: int = Field(..., gt=0)
+    dosage: str | None = None
+    frequency: str | None = None
+    duration: str | None = None
+    days: int | None = Field(None, gt=0)
+    instruction: str | None = None
+
+
+class PrescriptionCreateWithoutExam(BaseModel):
+    prescription_type: int
+    note: str | None = None
+    items: list[PrescriptionItemCreate] = []
+
+
+class ExaminationRecordCreate(BaseModel):
+    symptom: str | None = None
+    diagnosis: str | None = None
+    conclusion: str | None = None
+    disease_name: str | None = None
+    height: float | None = Field(None, gt=0)
+    weight: float | None = Field(None, gt=0)
+    blood_pressure: str | None = None
+    heart_rate: int | None = Field(None, gt=0)
+    temperature: float | None = Field(None, gt=30, lt=45)
+    note: str | None = None
+    examined_at: datetime | None = None
+    prescriptions: list[PrescriptionCreateWithoutExam] | None = None
 
 
 DoctorOut.model_rebuild()

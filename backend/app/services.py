@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta, date
 
 from jose import jwt
 from passlib.context import CryptContext
+from sqlalchemy import DECIMAL
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import settings
@@ -15,6 +16,7 @@ from app.models import (
     Specialty,
     User,
     UserRole,
+Medicine, MedicalRecord, Examination, PrescriptionDetail, Prescription
 )
 from app.repositories import (
     AppointmentRepository,
@@ -24,6 +26,11 @@ from app.repositories import (
     ScheduleSlotRepository,
     SpecialtyRepository,
     UserRepository,
+    MedicalRecordRepository,
+    ExaminationRepository,
+    PrescriptionRepository,
+    PrescriptionDetailRepository,
+    MedicineRepository,
 )
 from app.schemas import (
     AppointmentCancel,
@@ -33,7 +40,9 @@ from app.schemas import (
     SpecialtyCreate,
     SpecialtyUpdate,
     UserCreate,
+    ExaminationRecordCreate,
 )
+from app.utils import generate_record_number
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -138,6 +147,11 @@ class AppointmentService:
         self.slot_repo = ScheduleSlotRepository()
         self.doctor_repo = DoctorRepository()
         self.patient_repo = PatientRepository()
+        self.medical_record_repo = MedicalRecordRepository()
+        self.examination_repo = ExaminationRepository()
+        self.prescription_repo = PrescriptionRepository()
+        self.prescription_detail_repo = PrescriptionDetailRepository()
+        self.medicine_repo = MedicineRepository()
 
     async def get_user_appointments(
         self, db: AsyncSession, current_user: User
@@ -259,9 +273,126 @@ class AppointmentService:
             raise ValueError("Appointment not found after update")
         return updated
 
-    async def get_avaible_slots(self, db: AsyncSession, doctor_id: int, date: date) -> list[ScheduleSlot]:
-        slots = await self.slot_repo.get_available_slots_by_doctor_and_date(db, doctor_id, date)
+    async def get_available_slots(
+        self, db: AsyncSession, doctor_id: int, date: date
+    ) -> list[ScheduleSlot]:
+        slots = await self.slot_repo.get_available_slots_by_doctor_and_date(
+            db, doctor_id, date
+        )
         return slots
+
+    async def add_examination_record(
+        self,
+        db: AsyncSession,
+        appointment_id: int,
+        doctor: Doctor,
+        data: ExaminationRecordCreate,
+    ) -> Examination:
+        appointment = await self.repo.get_by_id_with_slot(db, appointment_id)
+        if not appointment:
+            raise ValueError("Appointment not found")
+        if appointment.slot.schedule.doctor_id != doctor.id:
+            raise ValueError("You are not the assigned doctor")
+
+        if appointment.status not in (AppointmentStatus.EXAMINING, AppointmentStatus.COMPLETED):
+            raise ValueError("Cannot add record for this status")
+
+        patient = appointment.patient
+        if not patient:
+            raise ValueError("Patient not found")
+
+        medical_record = await self.medical_record_repo.get_by_patient_id(db, patient.id)
+        if not medical_record:
+            record_number = generate_record_number()
+            medical_record = MedicalRecord(
+                patient_id=patient.id,
+                record_number=record_number,
+            )
+            db.add(medical_record)
+            await db.flush()
+
+        examination = await self.examination_repo.get_by_appointment(db, appointment_id)
+        if not examination:
+            examination = Examination(
+                appointment_id=appointment_id,
+                medical_record_id=medical_record.id,
+                patient_id=patient.id,
+                doctor_id=doctor.id,
+                symptom=data.symptom,
+                diagnosis=data.diagnosis,
+                conclusion=data.conclusion,
+                disease_name=data.disease_name,
+                height=data.height,
+                weight=data.weight,
+                blood_pressure=data.blood_pressure,
+                heart_rate=data.heart_rate,
+                temperature=data.temperature,
+                note=data.note,
+                examined_at=data.examined_at or datetime.now(UTC),
+                status="completed" if appointment.status == AppointmentStatus.COMPLETED else "in_progress",
+            )
+            db.add(examination)
+            await db.flush()
+        else:
+            examination.symptom = data.symptom
+            examination.diagnosis = data.diagnosis
+            examination.conclusion = data.conclusion
+            examination.disease_name = data.disease_name
+            examination.height = data.height
+            examination.weight = data.weight
+            examination.blood_pressure = data.blood_pressure
+            examination.heart_rate = data.heart_rate
+            examination.temperature = data.temperature
+            examination.note = data.note
+            examination.examined_at = data.examined_at or datetime.now(UTC)
+            if appointment.status == AppointmentStatus.COMPLETED:
+                examination.status = "completed"
+
+        if data.prescriptions:
+            existing_prescriptions = await self.prescription_repo.get_by_examination(db, examination.id)
+            for old_pres in existing_prescriptions:
+                await db.delete(old_pres)
+            await db.flush()
+
+            for pres_data in data.prescriptions:
+                prescription = Prescription(
+                    examination_id=examination.id,
+                    prescription_type=pres_data.prescription_type,
+                    note=pres_data.note,
+                    total_amount=DECIMAL(0),
+                    status=0,
+                )
+                db.add(prescription)
+                await db.flush()
+
+                total = DECIMAL(0)
+                for item in pres_data.items:
+                    medicine = await self.medicine_repo.get_by_id(db, item.medicine_id)
+                    if not medicine:
+                        raise ValueError(f"Medicine {item.medicine_id} not found")
+                    unit_price = medicine.current_price
+                    subtotal = unit_price * item.quantity
+                    total += subtotal
+
+                    detail = PrescriptionDetail(
+                        prescription_id=prescription.id,
+                        medicine_id=item.medicine_id,
+                        quantity=item.quantity,
+                        unit_price=unit_price,
+                        dosage=item.dosage,
+                        frequency=item.frequency,
+                        duration=item.duration,
+                        days=item.days,
+                        instruction=item.instruction,
+                        subtotal=subtotal,
+                    )
+                    db.add(detail)
+
+                prescription.total_amount = total
+
+        await db.commit()
+        await db.refresh(examination)
+        return examination
 
 class SpecialtyService:
     def __init__(self):

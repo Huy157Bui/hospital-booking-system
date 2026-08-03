@@ -7,6 +7,7 @@ from app.dependencies import (
     get_current_patient_profile,
     get_current_user,
     get_owned_schedule_slot,
+    get_current_doctor_profile,
 )
 from app.models import Patient, ScheduleSlot, User, Doctor
 from app.schemas import (
@@ -23,7 +24,10 @@ from app.schemas import (
     SpecialtyOut,
     Token,
     UserCreate,
-    UserOut, AppointmentStatusUpdate,
+    UserOut,
+    AppointmentStatusUpdate,
+    ExaminationRecordCreate,
+    ExaminationOut,
 )
 from app.services import (
     AppointmentService,
@@ -123,6 +127,18 @@ async def update_appointment_status(
     doctor: Doctor = Depends(get_current_doctor),
 ):
     return await appointment_service.update_appointment_status(db, appointment_id, status_update.status, doctor)
+
+@router.post("/appointments/{appointment_id}/record", response_model=ExaminationOut)
+async def add_examination_record(
+    appointment_id: int,
+    data: ExaminationRecordCreate = ...,
+    db: AsyncSession = Depends(get_db),
+    doctor: Doctor = Depends(get_current_doctor_profile()),
+    service: AppointmentService = Depends(),
+):
+    exam = await service.add_examination_record(db, appointment_id, doctor, data)
+    return exam
+
 
 specialty_service = SpecialtyService()
 
