@@ -511,6 +511,24 @@ class PatientMedicalHistoryOut(BaseModel):
     class Config:
         from_attributes = True
 
+class PaymentBase(BaseModel):
+    appointment_id: int
+    amount: Decimal = Field(..., max_digits=10, decimal_places=2)
+    payment_method: str | None = None
+
+class PaymentCreate(PaymentBase):
+    pass
+
+class PaymentOut(PaymentBase):
+    id: int
+    status: str
+    transaction_id: str | None
+    created_date: datetime
+    updated_date: datetime | None
+
+    class Config:
+        from_attributes = True
+
 DoctorOut.model_rebuild()
 
 DoctorScheduleOut.model_rebuild()

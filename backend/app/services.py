@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import settings
 from app.models import (
+    Payment,
     Appointment,
     AppointmentStatus,
     Doctor,
@@ -23,6 +24,7 @@ from app.models import (
     Examination,
     PrescriptionDetail,
     Prescription,
+    PaymentStatus,
 )
 from app.schemas import (
     AppointmentCancel,
@@ -166,6 +168,7 @@ class AppointmentService:
         prescription_repo: PrescriptionRepoDep,
         prescription_detail_repo: PrescriptionDetailRepoDep,
         medicine_repo: MedicineRepoDep,
+        payment_repo: PaymentRepoDep,
     ):
         self.appointment_repo = appointment_repo
         self.slot_repo = slot_repo
@@ -176,6 +179,7 @@ class AppointmentService:
         self.prescription_repo = prescription_repo
         self.prescription_detail_repo = prescription_detail_repo
         self.medicine_repo = medicine_repo
+        self.payment_repo = payment_repo
 
     async def get_accessible_appointment(
         self, appointment_id: int, current_user: User
@@ -453,6 +457,57 @@ class AppointmentService:
             raise ValueError("Không tìm thấy hồ sơ khám cho lịch hẹn này")
         return examination
 
+    async def create_payment(
+        self,
+        appointment_id: int,
+        current_user: User,
+        payment_method: str | None = None,
+    ) -> Payment:
+        appointment = await self.appointment_repo.get_by_id_with_relations(
+            appointment_id
+        )
+        if not appointment:
+            raise ValueError("Appointment not found")
+
+        if current_user.role != UserRole.PATIENT:
+            raise ValueError("Only patient can create payment")
+        patient = await self.patient_repo.get_by_user_id(current_user.id)
+        if not patient or patient.id != appointment.patient_id:
+            raise ValueError("You are not the owner of this appointment")
+
+        if appointment.status not in (
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.PENDING,
+        ):
+            raise ValueError(
+                "Payment can only be created for completed or pending appointments"
+            )
+
+        existing_payment = await self.payment_repo.get_by_appointment(appointment_id)
+        if existing_payment:
+            raise ValueError("Payment already exists for this appointment")
+
+        doctor = appointment.slot.schedule.doctor
+        if not doctor:
+            raise ValueError("Doctor not found for this appointment")
+        amount = doctor.consultation_fee
+
+        payment = Payment(
+            appointment_id=appointment_id,
+            amount=amount,
+            status=PaymentStatus.PENDING,
+            payment_method=payment_method,
+            transaction_id=None,
+        )
+        await self.payment_repo.create(payment)
+        await self.payment_repo.commit()
+        await self.payment_repo.refresh(payment)
+
+        appointment.status = AppointmentStatus.PAID
+        await self.appointment_repo.update(appointment)
+
+        return payment
+
 
 class SpecialtyService:
     def __init__(
@@ -580,10 +635,14 @@ class PatientService:
         patient_repo: PatientRepoDep,
         medical_record_repo: MedicalRecordRepoDep,
         examination_repo: ExaminationRepoDep,
+            doctor_repo: DoctorRepoDep,
+            appointment_repo: AppointmentRepoDep,
     ):
         self.patient_repo = patient_repo
         self.medical_record_repo = medical_record_repo
         self.examination_repo = examination_repo
+        self.doctor_repo = doctor_repo
+        self.appointment_repo = appointment_repo
 
     async def get_owned_medical_record(self, patient_id: int) -> MedicalRecord:
         record = await self.medical_record_repo.get_by_patient_id(patient_id)
@@ -604,6 +663,31 @@ class PatientService:
             "medical_record": medical_record,
             "examinations": examinations,
         }
+
+    async def get_patient_medical_history_with_access(
+        self, patient_id: int, current_user: User
+    ) -> dict:
+        patient = await self.patient_repo.get_by_id(patient_id)
+        if not patient:
+            raise ValueError("Patient not found")
+        if current_user.role == UserRole.ADMIN:
+            pass
+        elif current_user.role == UserRole.DOCTOR:
+            doctor = await self.doctor_repo.get_by_user_id(current_user.id)
+            if not doctor:
+                raise ValueError("Doctor profile not found")
+            has_access = await self.appointment_repo.exists_by_doctor_and_patient(
+                doctor.id, patient_id
+            )
+            if not has_access:
+                raise ValueError(
+                    "You are not authorized to view this patient's records"
+                )
+        else:
+            raise ValueError("Only doctors and admins can access")
+        medical_record = await self.medical_record_repo.get_by_patient_id(patient_id)
+        examinations = await self.examination_repo.get_by_patient(patient_id)
+        return {"medical_record": medical_record, "examinations": examinations}
 
 
 class ScheduleService:

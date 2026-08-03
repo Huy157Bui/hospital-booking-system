@@ -13,6 +13,7 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Time,
+    DECIMAL,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -55,6 +56,12 @@ class ScheduleSlotStatus(str, enum.Enum):
 class SpecialtyStatus(str, enum.Enum):
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
+
+class PaymentStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    REFUNDED = "REFUNDED"
 
 class User(Base):
     __tablename__ = "users"
@@ -193,6 +200,7 @@ class Appointment(Base):
     examination = relationship(
         "Examination", back_populates="appointment", uselist=False
     )
+    payment = relationship("Payment", back_populates="appointment", uselist=False)
 
 
 class MedicalRecord(Base):
@@ -321,3 +329,17 @@ class PrescriptionDetail(Base):
     medicine = relationship(
         "Medicine", back_populates="prescription_details", uselist=False
     )
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=False)
+    amount = Column(DECIMAL(10, 2), nullable=False)
+    status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING)
+    payment_method = Column(String(50), nullable=True)
+    transaction_id = Column(String(100), nullable=True)
+    created_date = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
+
+    appointment = relationship("Appointment", back_populates="payment")

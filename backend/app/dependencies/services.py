@@ -12,6 +12,7 @@ def get_appointment_service(
     prescription_repo: PrescriptionRepoDep,
     prescription_detail_repo: PrescriptionDetailRepoDep,
     medicine_repo: MedicineRepoDep,
+    payment_repo: PaymentRepoDep,
 ) -> AppointmentService:
     return AppointmentService(
         appointment_repo=appointment_repo,
@@ -23,6 +24,7 @@ def get_appointment_service(
         prescription_repo=prescription_repo,
         prescription_detail_repo=prescription_detail_repo,
         medicine_repo=medicine_repo,
+        payment_repo=payment_repo,
     )
 
 
@@ -37,6 +39,7 @@ def get_auth_service(
 ) -> AuthService:
     return AuthService(user_repo=user_repo)
 
+
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
@@ -44,6 +47,7 @@ def get_user_service(
     user_repo: UserRepoDep,
 ) -> UserService:
     return UserService(user_repo=user_repo)
+
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 
@@ -86,13 +90,20 @@ def get_patient_service(
     patient_repo: PatientRepoDep,
     medical_record_repo: MedicalRecordRepoDep,
     examination_repo: ExaminationRepoDep,
+    doctor_repo: DoctorRepoDep,
+    appointment_repo: AppointmentRepoDep,
 ) -> PatientService:
     return PatientService(
         patient_repo=patient_repo,
         medical_record_repo=medical_record_repo,
         examination_repo=examination_repo,
+        doctor_repo=doctor_repo,
+        appointment_repo=appointment_repo,
     )
+
+
 PatientServiceDep = Annotated[PatientService, Depends(get_patient_service)]
+
 
 def get_schedule_service(
     schedule_repo: ScheduleRepoDep,

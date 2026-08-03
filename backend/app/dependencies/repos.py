@@ -17,6 +17,7 @@ from app.repositories import (
     MedicineRepository,
     SpecialtyRepository,
     UserRepository,
+    PaymentRepository,
 )
 from app.services import AppointmentService, SpecialtyService
 
@@ -145,3 +146,8 @@ SpecialtyRepoDep = Annotated[
     SpecialtyRepository,
     Depends(get_specialty_repository),
 ]
+def get_payment_repository(db: DbDep,) -> PaymentRepository:
+    return PaymentRepository(db)
+
+PaymentRepoDep = Annotated[PaymentRepository, Depends(get_payment_repository)]
+

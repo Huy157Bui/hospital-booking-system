@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.base import Base
 from app.models import (
+    Payment,
     Appointment,
     AppointmentStatus,
     Doctor,
@@ -41,12 +42,12 @@ class BaseRepository(Generic[ModelType]):
         result = await self.db.execute(select(self.model).offset(skip).limit(limit))
         return list(result.scalars().all())
 
-    async def create(self,  data: ModelType) -> ModelType:
+    async def create(self, data: ModelType) -> ModelType:
         self.db.add(data)
         await self.db.flush()
         return data
 
-    async def update(self,  data: ModelType) -> ModelType:
+    async def update(self, data: ModelType) -> ModelType:
         await self.db.flush()
         return data
 
@@ -71,7 +72,7 @@ class BaseRepository(Generic[ModelType]):
 
 
 class UserRepository(BaseRepository[User]):
-    def __init__(self, db:AsyncSession) -> None:
+    def __init__(self, db: AsyncSession) -> None:
         super().__init__(User, db)
 
     async def get_by_username(self, username: str) -> User | None:
@@ -82,9 +83,7 @@ class UserRepository(BaseRepository[User]):
         result = await self.db.execute(select(User).where(User.email == email))
         return result.scalar_one_or_none()
 
-    async def get_active_users(
-        self, *, skip: int = 0, limit: int = 100
-    ) -> list[User]:
+    async def get_active_users(self, *, skip: int = 0, limit: int = 100) -> list[User]:
         result = await self.db.execute(
             select(User).where(User.is_active == True).offset(skip).limit(limit)
         )
@@ -92,12 +91,10 @@ class UserRepository(BaseRepository[User]):
 
 
 class PatientRepository(BaseRepository[Patient]):
-    def __init__(self, db:AsyncSession) -> None:
-        super().__init__(Patient,db)
+    def __init__(self, db: AsyncSession) -> None:
+        super().__init__(Patient, db)
 
-    async def get_by_identity_number(
-        self, identity: str
-    ) -> Patient | None:
+    async def get_by_identity_number(self, identity: str) -> Patient | None:
         result = await self.db.execute(
             select(Patient)
             .where(Patient.identity_number == identity)
@@ -115,12 +112,10 @@ class PatientRepository(BaseRepository[Patient]):
 
 
 class DoctorRepository(BaseRepository[Doctor]):
-    def __init__(self, db:AsyncSession) -> None:
+    def __init__(self, db: AsyncSession) -> None:
         super().__init__(Doctor, db)
 
-    async def get_by_license(
-        self, license_number: str
-    ) -> Doctor | None:
+    async def get_by_license(self, license_number: str) -> Doctor | None:
         result = await self.db.execute(
             select(Doctor)
             .where(Doctor.license_number == license_number)
@@ -148,9 +143,7 @@ class DoctorRepository(BaseRepository[Doctor]):
         )
         return list(result.scalars().all())
 
-    async def get_active_doctors_by_specialty(
-        self, specialty_id: int
-    ) -> list[Doctor]:
+    async def get_active_doctors_by_specialty(self, specialty_id: int) -> list[Doctor]:
         result = await self.db.execute(
             select(Doctor)
             .where(Doctor.status == "active", Doctor.specialty_id == specialty_id)
@@ -174,9 +167,7 @@ class DoctorRepository(BaseRepository[Doctor]):
         )
         return result.scalar_one_or_none()
 
-    async def count_active_by_specialty(
-        self, specialty_id: int
-    ) -> int:
+    async def count_active_by_specialty(self, specialty_id: int) -> int:
         result = await self.db.execute(
             select(func.count())
             .select_from(Doctor)
@@ -184,9 +175,7 @@ class DoctorRepository(BaseRepository[Doctor]):
         )
         return result.scalar_one()
 
-    async def exists_active_by_specialty(
-        self, specialty_id: int
-    ) -> bool:
+    async def exists_active_by_specialty(self, specialty_id: int) -> bool:
         stmt = select(
             exists().where(
                 Doctor.specialty_id == specialty_id, Doctor.status == "active"
@@ -197,7 +186,7 @@ class DoctorRepository(BaseRepository[Doctor]):
 
 
 class SpecialtyRepository(BaseRepository[Specialty]):
-    def __init__(self, db:AsyncSession) -> None:
+    def __init__(self, db: AsyncSession) -> None:
         super().__init__(Specialty, db)
 
     async def get_by_name(self, name: str) -> Specialty | None:
@@ -212,9 +201,7 @@ class SpecialtyRepository(BaseRepository[Specialty]):
         )
         return list(result.scalars().all())
 
-    async def get_active_by_id(
-        self,  specialty_id: int
-    ) -> Specialty | None:
+    async def get_active_by_id(self, specialty_id: int) -> Specialty | None:
         result = await self.db.execute(
             select(Specialty).where(
                 Specialty.id == specialty_id, Specialty.status == "active"
@@ -222,8 +209,7 @@ class SpecialtyRepository(BaseRepository[Specialty]):
         )
         return result.scalar_one_or_none()
 
-
-# che
+    # che
     async def toggle_status(self, specialty: Specialty) -> Specialty:
         if specialty.status == SpecialtyStatus.ACTIVE:
             specialty.status = SpecialtyStatus.INACTIVE
@@ -231,8 +217,9 @@ class SpecialtyRepository(BaseRepository[Specialty]):
             specialty.status = SpecialtyStatus.ACTIVE
         return await self.update(specialty)
 
+
 class ScheduleRepository(BaseRepository[Schedule]):
-    def __init__(self, db:AsyncSession) -> None:
+    def __init__(self, db: AsyncSession) -> None:
         super().__init__(Schedule, db)
 
     async def get_by_doctor(self, doctor_id: int) -> list[Schedule]:
@@ -262,7 +249,7 @@ class ScheduleRepository(BaseRepository[Schedule]):
         return list(result.scalars().all())
 
     async def get_open_schedules(
-        self,*, skip: int = 0, limit: int = 100
+        self, *, skip: int = 0, limit: int = 100
     ) -> list[Schedule]:
         result = await self.db.execute(
             select(Schedule)
@@ -291,9 +278,7 @@ class ScheduleSlotRepository(BaseRepository[ScheduleSlot]):
         )
         return list(result.scalars().all())
 
-    async def get_by_id_with_schedule(
-        self, slot_id: int
-    ) -> ScheduleSlot | None:
+    async def get_by_id_with_schedule(self, slot_id: int) -> ScheduleSlot | None:
         result = await self.db.execute(
             select(ScheduleSlot)
             .where(ScheduleSlot.id == slot_id)
@@ -301,12 +286,19 @@ class ScheduleSlotRepository(BaseRepository[ScheduleSlot]):
         )
         return result.scalar_one_or_none()
 
-    async def get_available_slots_by_doctor_and_date(self,  doctor_id: int, date: date) -> list[ScheduleSlot]:
-        statement = select(ScheduleSlot).join(Schedule).where(
-            Schedule.doctor_id == doctor_id,
-            Schedule.date == date,
-            Schedule.status == ScheduleSlotStatus.AVAILABLE,
-        ).order_by(ScheduleSlot.start_time)
+    async def get_available_slots_by_doctor_and_date(
+        self, doctor_id: int, date: date
+    ) -> list[ScheduleSlot]:
+        statement = (
+            select(ScheduleSlot)
+            .join(Schedule)
+            .where(
+                Schedule.doctor_id == doctor_id,
+                Schedule.date == date,
+                Schedule.status == ScheduleSlotStatus.AVAILABLE,
+            )
+            .order_by(ScheduleSlot.start_time)
+        )
         result = await self.db.execute(statement)
         return list(result.scalars().all())
 
@@ -375,9 +367,7 @@ class AppointmentRepository(BaseRepository[Appointment]):
         )
         return result.scalar_one_or_none()
 
-    async def cancel(
-        self, appointment: Appointment, cancel_reason: str
-    ) -> Appointment:
+    async def cancel(self, appointment: Appointment, cancel_reason: str) -> Appointment:
         appointment.status = AppointmentStatus.CANCELLED
         appointment.cancel_reason = cancel_reason
         appointment.slot.status = ScheduleSlotStatus.AVAILABLE
@@ -391,14 +381,26 @@ class AppointmentRepository(BaseRepository[Appointment]):
         await self.db.flush()
         return appointment
 
+    async def exists_by_doctor_and_patient(
+        self, doctor_id: int, patient_id: int
+    ) -> bool:
+        stmt = select(
+            exists().where(
+                Appointment.patient_id == patient_id,
+                Appointment.slot.has(
+                    ScheduleSlot.schedule.has(Schedule.doctor_id == doctor_id)
+                ),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
+
 
 class MedicalRecordRepository(BaseRepository[MedicalRecord]):
-    def __init__(self, db:AsyncSession) -> None:
+    def __init__(self, db: AsyncSession) -> None:
         super().__init__(MedicalRecord, db)
 
-    async def get_by_patient_id(
-        self,  patient_id: int
-    ) -> MedicalRecord | None:
+    async def get_by_patient_id(self, patient_id: int) -> MedicalRecord | None:
         result = await self.db.execute(
             select(MedicalRecord)
             .where(MedicalRecord.patient_id == patient_id)
@@ -406,9 +408,7 @@ class MedicalRecordRepository(BaseRepository[MedicalRecord]):
         )
         return result.scalar_one_or_none()
 
-    async def get_by_record_number(
-        self,  record_number: str
-    ) -> MedicalRecord | None:
+    async def get_by_record_number(self, record_number: str) -> MedicalRecord | None:
         result = await self.db.execute(
             select(MedicalRecord)
             .where(MedicalRecord.record_number == record_number)
@@ -416,7 +416,7 @@ class MedicalRecordRepository(BaseRepository[MedicalRecord]):
         )
         return result.scalar_one_or_none()
 
-    async def exists_by_patient(self,  patient_id: int) -> bool:
+    async def exists_by_patient(self, patient_id: int) -> bool:
         stmt = select(exists().where(MedicalRecord.patient_id == patient_id))
         result = await self.db.execute(stmt)
         return result.scalar_one()
@@ -441,9 +441,7 @@ class ExaminationRepository(BaseRepository[Examination]):
             selectinload(Examination.doctor).selectinload(Doctor.specialty),
         ]
 
-    async def get_by_appointment(
-        self, appointment_id: int
-    ) -> Examination | None:
+    async def get_by_appointment(self, appointment_id: int) -> Examination | None:
         result = await self.db.execute(
             select(Examination)
             .where(Examination.appointment_id == appointment_id)
@@ -475,9 +473,7 @@ class ExaminationRepository(BaseRepository[Examination]):
         )
         return list(result.scalars().all())
 
-    async def get_by_medical_record(
-        self, medical_record_id: int
-    ) -> list[Examination]:
+    async def get_by_medical_record(self, medical_record_id: int) -> list[Examination]:
         result = await self.db.execute(
             select(Examination)
             .where(Examination.medical_record_id == medical_record_id)
@@ -514,7 +510,7 @@ class PrescriptionRepository(BaseRepository[Prescription]):
 
 
 class PrescriptionDetailRepository(BaseRepository[PrescriptionDetail]):
-    def __init__(self, db:AsyncSession) -> None:
+    def __init__(self, db: AsyncSession) -> None:
         super().__init__(PrescriptionDetail, db)
 
     async def get_by_prescription(
@@ -539,7 +535,9 @@ class PrescriptionDetailRepository(BaseRepository[PrescriptionDetail]):
         )
         return list(result.scalars().all())
 
-    async def bulk_create(self, details: list[PrescriptionDetail]) -> list[PrescriptionDetail]:
+    async def bulk_create(
+        self, details: list[PrescriptionDetail]
+    ) -> list[PrescriptionDetail]:
         self.db.add_all(details)
         await self.db.flush()
         return details
@@ -554,7 +552,7 @@ class MedicineRepository(BaseRepository[Medicine]):
         return result.scalar_one_or_none()
 
     async def get_active_medicines(
-        self,  *, skip: int = 0, limit: int = 100
+        self, *, skip: int = 0, limit: int = 100
     ) -> list[Medicine]:
         result = await self.db.execute(
             select(Medicine)
@@ -577,5 +575,15 @@ class MedicineRepository(BaseRepository[Medicine]):
             select(Medicine).where(
                 Medicine.id == medicine_id, Medicine.status == "active"
             )
+        )
+        return result.scalar_one_or_none()
+
+class PaymentRepository(BaseRepository[Payment]):
+    def __init__(self, db: AsyncSession):
+        super().__init__(Payment, db)
+
+    async def get_by_appointment(self, appointment_id: int) -> Payment | None:
+        result = await self.db.execute(
+            select(Payment).where(Payment.appointment_id == appointment_id)
         )
         return result.scalar_one_or_none()

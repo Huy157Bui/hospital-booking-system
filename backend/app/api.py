@@ -31,6 +31,8 @@ from app.schemas import (
     ExaminationRecordCreate,
     ExaminationOut,
     PatientMedicalHistoryOut,
+    PaymentOut,
+    PaymentCreate,
 )
 
 router = APIRouter(prefix="")
@@ -71,7 +73,9 @@ async def get_my_profile(
 
 
 @router.get(
-    "/me/medical-records", response_model=PatientMedicalHistoryOut, tags=["Patients"]
+    "/users/me/medical-records",
+    response_model=PatientMedicalHistoryOut,
+    tags=["Patients"],
 )
 async def get_my_medical_records(
     patient_service: PatientServiceDep,
@@ -83,7 +87,9 @@ async def get_my_medical_records(
         examinations=result["examinations"],
     )
 
+
 appointments_router = APIRouter(prefix="/appointments", tags=["Appointments"])
+
 
 @appointments_router.get("/users/me/appointments", response_model=list[AppointmentOut])
 async def get_my_appointments(
@@ -156,7 +162,33 @@ async def get_appointment_record(
 ):
     return await appointment_service.get_appointment_record(appointment)
 
+@appointments_router.post("/{appointment_id}/payment", response_model=PaymentOut, status_code=201)
+async def create_payment(
+    appointment_id: int,
+    payment_data: PaymentCreate | None = None,
+    appointment_service: AppointmentServiceDep = Depends(),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        payment_method = payment_data.payment_method if payment_data else None
+        payment = await appointment_service.create_payment(
+            appointment_id,
+            current_user,
+            payment_method,
+        )
+        return PaymentOut.model_validate(payment)
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=404, detail=msg)
+        elif "only patient" in msg.lower() or "not the owner" in msg.lower():
+            raise HTTPException(status_code=403, detail=msg)
+        elif "already exists" in msg.lower():
+            raise HTTPException(status_code=409, detail=msg)
+        raise HTTPException(status_code=400, detail=msg)
+
 specialties_router = APIRouter(prefix="/specialties", tags=["Specialties"])
+
 
 @specialties_router.get("", response_model=list[SpecialtyOut])
 async def get_specialties(specialty_service: SpecialtyServiceDep):
@@ -233,3 +265,34 @@ async def update_my_schedule_slot(
     slot: ScheduleSlot = Depends(get_owned_schedule_slot),
 ):
     return await doctor_service.update_my_schedule_slot(slot, slot_data)
+
+
+patients_router = APIRouter(prefix="/patients", tags=["Patients"])
+
+@patients_router.get(
+    "/{patient_id}/medical-records",
+    response_model=PatientMedicalHistoryOut
+)
+async def get_patient_medical_records(
+    patient_id: int,
+    patient_service: PatientServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        result = await patient_service.get_patient_medical_history_with_access(
+            patient_id, current_user
+        )
+        return PatientMedicalHistoryOut(
+            medical_record=result["medical_record"],
+            examinations=result["examinations"],
+        )
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=404, detail=msg)
+        elif "not authorized" in msg.lower() or "only doctors" in msg.lower():
+            raise HTTPException(status_code=403, detail=msg)
+        else:
+            raise HTTPException(status_code=400, detail=msg)
+    except Exception as e:
+        raise HTTPException(status_code=500)
