@@ -52,6 +52,9 @@ class ScheduleSlotStatus(str, enum.Enum):
     BOOKED = "BOOKED"
     BLOCKED = "BLOCKED"
 
+class SpecialtyStatus(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
 
 class User(Base):
     __tablename__ = "users"
@@ -131,7 +134,7 @@ class Specialty(Base):
     phone = Column(String(50), nullable=True)
     email = Column(String(50), nullable=True)
     working_hours = Column(String(50), nullable=True)
-    status = Column(String(50), nullable=False, default="active")
+    status = Column(Enum(ScheduleStatus), nullable=False, default=SpecialtyStatus.ACTIVE)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
     # 1-n
