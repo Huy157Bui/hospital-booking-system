@@ -578,6 +578,7 @@ class MedicineRepository(BaseRepository[Medicine]):
         )
         return result.scalar_one_or_none()
 
+
 class PaymentRepository(BaseRepository[Payment]):
     def __init__(self, db: AsyncSession):
         super().__init__(Payment, db)
@@ -587,3 +588,12 @@ class PaymentRepository(BaseRepository[Payment]):
             select(Payment).where(Payment.appointment_id == appointment_id)
         )
         return result.scalar_one_or_none()
+
+    async def get_by_patient_id(self, patient_id: int) -> list[Payment]:
+        result = await self.db.execute(
+            select(Payment)
+            .join(Appointment, Payment.appointment_id == Appointment.id)
+            .where(Appointment.patient_id == patient_id)
+            .order_by(Payment.created_date.desc())
+        )
+        return list(result.scalars().all())

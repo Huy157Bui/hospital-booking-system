@@ -8,6 +8,12 @@ from sqlalchemy import DECIMAL
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import settings
+from app.exceptions import (
+    BadRequestException,
+    ForbiddenException,
+    ResourceNotFound,
+    ConflictException,
+)
 from app.models import (
     Payment,
     Appointment,
@@ -36,6 +42,7 @@ from app.schemas import (
     UserCreate,
     ExaminationRecordCreate,
     ExaminationOut,
+    PaymentOut,
 )
 from app.dependencies.repos import *
 from app.utils import generate_record_number
@@ -88,9 +95,9 @@ class AuthService:
 
     async def register(self, user_data: UserCreate) -> User:
         if await self.user_repo.get_by_username(user_data.username):
-            raise ValueError("Tên đăng nhập đã tồn tại")
+            raise BadRequestException("Tên đăng nhập đã tồn tại")
         if await self.user_repo.get_by_email(user_data.email):
-            raise ValueError("Email đã tồn tại")
+            raise BadRequestException("Email đã tồn tại")
 
         hashed_password = hash_password(user_data.password)
         user = User(
@@ -116,9 +123,9 @@ class AuthService:
     async def login(self, username: str, password: str) -> dict | None:
         user = await self.authenticate(username, password)
         if not user:
-            raise ValueError("Sai tên đăng nhập hoặc mật khẩu")
+            raise BadRequestException("Sai tên đăng nhập hoặc mật khẩu")
         if not user.is_active:
-            raise ValueError("Tài khoản bị vô hiệu hóa")
+            raise ForbiddenException("Tài khoản bị vô hiệu hóa")
 
         user.last_login = datetime.now(UTC)
         await self.user_repo.update(user)
@@ -136,7 +143,7 @@ class AuthService:
             return None
         return user
 
-    async def get_user_by_id(self, db: AsyncSession, user_id: int) -> User | None:
+    async def get_user_by_id(self, user_id: int) -> User | None:
         user = await self.user_repo.get_by_id(user_id)
         if user is None:
             return None
@@ -188,7 +195,7 @@ class AppointmentService:
             appointment_id
         )
         if not appointment:
-            raise ValueError("Không tìm thấy lịch hẹn")
+            raise ResourceNotFound("Không tìm thấy lịch hẹn")
 
         if current_user.role == UserRole.ADMIN:
             return appointment
@@ -196,16 +203,16 @@ class AppointmentService:
         if current_user.role == UserRole.PATIENT:
             patient = await self.patient_repo.get_by_user_id(current_user.id)
             if not patient or patient.id != appointment.patient_id:
-                raise ValueError("Bạn không phải bệnh nhân của lịch hẹn này")
+                raise ForbiddenException("Bạn không phải bệnh nhân của lịch hẹn này")
             return appointment
 
         if current_user.role == UserRole.DOCTOR:
             doctor = await self.doctor_repo.get_by_user_id(current_user.id)
             if not doctor or doctor.id != appointment.slot.schedule.doctor_id:
-                raise ValueError("Bạn không phải bác sĩ được phân công")
+                raise ForbiddenException("Bạn không phải bác sĩ được phân công")
             return appointment
 
-        raise ValueError("Chỉ bệnh nhân, bác sĩ hoặc quản trị viên mới được xem lịch hẹn này")
+        raise ForbiddenException("Chỉ bệnh nhân, bác sĩ hoặc quản trị viên mới được xem lịch hẹn này")
 
     async def get_user_appointments(self, current_user: User) -> list[Appointment]:
         if current_user.role == UserRole.PATIENT:
@@ -220,17 +227,17 @@ class AppointmentService:
         slot = await self.slot_repo.get_by_id(appointment_data.slot_id)
 
         if slot is None:
-            raise ValueError("Không tìm thấy khung giờ")
+            raise ResourceNotFound("Không tìm thấy khung giờ")
 
         if slot.status != ScheduleSlotStatus.AVAILABLE:
-            raise ValueError("Khung giờ không khả dụng")
+            raise BadRequestException("Khung giờ không khả dụng")
 
         if getattr(slot, "appointment", None) is not None:
-            raise ValueError("Khung giờ đã được đặt")
+            raise ConflictException("Khung giờ đã được đặt")
 
         existing = await self.appointment_repo.get_by_slot_id(appointment_data.slot_id)
         if existing is not None:
-            raise ValueError("Khung giờ đã được đặt")
+            raise ConflictException("Khung giờ đã được đặt")
 
         appointment = Appointment(
             patient_id=patient.id,
@@ -255,19 +262,19 @@ class AppointmentService:
     ):
         appointment = await self.appointment_repo.get_by_id_with_slot(appointment_id)
         if not appointment:
-            raise ValueError("Không tìm thấy lịch hẹn")
+            raise ResourceNotFound("Không tìm thấy lịch hẹn")
 
         if current_user.role != UserRole.ADMIN:
             if current_user.role != UserRole.PATIENT:
-                raise ValueError("Từ chối truy cập")
+                raise ForbiddenException("Từ chối truy cập")
             patient = await self.patient_repo.get_by_user_id(current_user.id)
             if not patient or appointment.patient_id != patient.id:
-                raise ValueError("Từ chối truy cập")
+                raise ForbiddenException("Từ chối truy cập")
 
         if appointment.status == AppointmentStatus.CANCELLED:
-            raise ValueError("Từ chối truy cập")
+            raise ForbiddenException("Từ chối truy cập")
         if appointment.status == AppointmentStatus.COMPLETED:
-            raise ValueError("Không thể hủy lịch hẹn đã hoàn thành")
+            raise BadRequestException("Không thể hủy lịch hẹn đã hoàn thành")
 
         return await self.appointment_repo.cancel(
             appointment, cancel_data.cancel_reason
@@ -282,10 +289,10 @@ class AppointmentService:
 
         appointment = await self.appointment_repo.get_by_id_with_slot(appointment_id)
         if not appointment:
-            raise ValueError("Không tìm thấy lịch hẹn")
+            raise ResourceNotFound("Không tìm thấy lịch hẹn")
 
         if appointment.slot.schedule.doctor_id != doctor.id:
-            raise ValueError("Bạn không phải bác sĩ được phân công cho lịch hẹn này")
+            raise ForbiddenException("Bạn không phải bác sĩ được phân công cho lịch hẹn này")
 
         current_status = appointment.status
         if current_status in (
@@ -293,7 +300,7 @@ class AppointmentService:
             AppointmentStatus.COMPLETED,
             AppointmentStatus.PAID,
         ):
-            raise ValueError(f"Không thể thay đổi trạng thái từ {appointment.status.value}")
+            raise BadRequestException("Không thể thay đổi trạng thái")
 
         valid_transitions = {
             AppointmentStatus.PENDING: [
@@ -312,13 +319,11 @@ class AppointmentService:
         }
         allowed = valid_transitions.get(current_status, [])
         if new_status not in allowed:
-            raise ValueError(
-                f"Chỉ có thể chuyển từ {current_status.value} sang một trong các trạng thái: {[s.value for s in allowed]}"
-            )
+            raise BadRequestException("Chuyển trạng thái không hợp lệ")
         await self.appointment_repo.update_status(appointment, new_status)
         updated = await self.appointment_repo.get_by_id_with_relations(appointment_id)
         if not updated:
-            raise ValueError("Không tìm thấy lịch hẹn sau khi cập nhật")
+            raise ResourceNotFound("Không tìm thấy lịch hẹn sau khi cập nhật")
         return updated
 
     async def get_available_slots(
@@ -337,18 +342,18 @@ class AppointmentService:
     ) -> Examination:
         appointment = await self.appointment_repo.get_by_id_with_slot(appointment_id)
         if not appointment:
-            raise ValueError("Không tìm thấy lịch hẹn")
+            raise ResourceNotFound("Không tìm thấy lịch hẹn")
         if appointment.slot.schedule.doctor_id != doctor.id:
-            raise ValueError("Bạn không phải bác sĩ được phân công")
+            raise ForbiddenException("Bạn không phải bác sĩ được phân công")
         if appointment.status not in (
             AppointmentStatus.EXAMINING,
             AppointmentStatus.COMPLETED,
         ):
-            raise ValueError("Không thể thêm hồ sơ cho trạng thái này")
+            raise BadRequestException("Không thể thêm hồ sơ cho trạng thái này")
 
         patient = appointment.patient
         if not patient:
-            raise ValueError("Không tìm thấy bệnh nhân")
+            raise ResourceNotFound("Không tìm thấy bệnh nhân")
 
         medical_record = await self.medical_record_repo.get_by_patient_id(patient.id)
         if not medical_record:
@@ -424,7 +429,7 @@ class AppointmentService:
                 for item in pres_data.items:
                     medicine = await self.medicine_repo.get_by_id(item.medicine_id)
                     if not medicine:
-                        raise ValueError(f"Không tìm thấy thuốc với ID {item.medicine_id}")
+                        raise ResourceNotFound("Không tìm thấy thuốc")
                     unit_price = medicine.current_price
                     subtotal = unit_price * item.quantity
                     total += subtotal
@@ -454,7 +459,7 @@ class AppointmentService:
     async def get_appointment_record(self, appointment: Appointment) -> Examination:
         examination = await self.examination_repo.get_by_appointment(appointment.id)
         if not examination:
-            raise ValueError("Không tìm thấy hồ sơ khám cho lịch hẹn này")
+            raise ResourceNotFound("Không tìm thấy hồ sơ khám cho lịch hẹn này")
         return examination
 
     async def create_payment(
@@ -467,29 +472,27 @@ class AppointmentService:
             appointment_id
         )
         if not appointment:
-            raise ValueError("Appointment not found")
+            raise ResourceNotFound("Không tìm thấy lịch hẹn")
 
         if current_user.role != UserRole.PATIENT:
-            raise ValueError("Only patient can create payment")
+            raise ForbiddenException("Chỉ bệnh nhân mới có thể tạo thanh toán")
         patient = await self.patient_repo.get_by_user_id(current_user.id)
         if not patient or patient.id != appointment.patient_id:
-            raise ValueError("You are not the owner of this appointment")
+            raise ForbiddenException("Bạn không phải chủ sở hữu của lịch hẹn này")
 
         if appointment.status not in (
             AppointmentStatus.COMPLETED,
             AppointmentStatus.PENDING,
         ):
-            raise ValueError(
-                "Payment can only be created for completed or pending appointments"
-            )
+            raise BadRequestException("Chỉ có thể tạo thanh toán cho lịch hẹn đã hoàn thành hoặc đang chờ xác nhận")
 
         existing_payment = await self.payment_repo.get_by_appointment(appointment_id)
         if existing_payment:
-            raise ValueError("Payment already exists for this appointment")
+            raise ConflictException("Lịch hẹn này đã có thanh toán")
 
         doctor = appointment.slot.schedule.doctor
         if not doctor:
-            raise ValueError("Doctor not found for this appointment")
+            raise ResourceNotFound("Không tìm thấy bác sĩ của lịch hẹn này")
         amount = doctor.consultation_fee
 
         payment = Payment(
@@ -524,20 +527,20 @@ class SpecialtyService:
     async def get_specialty(self, specialty_id: int) -> Specialty:
         specialty = await self.specialty_repo.get_active_by_id(specialty_id)
         if specialty is None:
-            raise ValueError("Không tìm thấy chuyên khoa")
+            raise ResourceNotFound("Không tìm thấy chuyên khoa")
         return specialty
 
     async def create_specialty(self, specialty_data: SpecialtyCreate) -> Specialty:
         existed = await self.specialty_repo.get_by_name(specialty_data.name)
         if existed:
-            raise ValueError("Chuyên khoa đã tồn tại")
+            raise ConflictException("Chuyên khoa đã tồn tại")
         specialty = Specialty(**specialty_data.model_dump())
         return await self.specialty_repo.create(specialty)
 
     async def toggle_specialty_status(self, specialty_id: int) -> Specialty:
         specialty = await self.specialty_repo.get_by_id(specialty_id)
         if specialty is None:
-            raise ValueError("Không tìm thấy chuyên khoa")
+            raise ResourceNotFound("Không tìm thấy chuyên khoa")
         return await self.specialty_repo.toggle_status(specialty)
 
     async def update_specialty(
@@ -545,11 +548,11 @@ class SpecialtyService:
     ) -> Specialty:
         specialty = await self.specialty_repo.get_active_by_id(specialty_id)
         if specialty is None:
-            raise ValueError("Không tìm thấy chuyên khoa")
+            raise ResourceNotFound("Không tìm thấy chuyên khoa")
         if specialty_data.name and specialty_data.name != specialty.name:
             existed = await self.specialty_repo.get_by_name(specialty_data.name)
             if existed:
-                raise ValueError("Chuyên khoa đã tồn tại")
+                raise ConflictException("Chuyên khoa đã tồn tại")
 
         update_data = specialty_data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
@@ -577,7 +580,7 @@ class DoctorService:
     async def get_profile_by_user_id(self, user_id: int) -> Doctor:
         doctor = await self.doctor_repo.get_by_user_id(user_id)
         if doctor is None:
-            raise ValueError("Không tìm thấy hồ sơ bác sĩ")
+            raise ResourceNotFound("Không tìm thấy hồ sơ bác sĩ")
         return doctor
 
     async def get_doctors(self, specialty_id: int | None = None) -> list[Doctor]:
@@ -588,13 +591,13 @@ class DoctorService:
     async def get_doctor(self, doctor_id: int) -> Doctor:
         doctor = await self.doctor_repo.get_active_by_id(doctor_id)
         if doctor is None:
-            raise ValueError("Không tìm thấy bác sĩ")
+            raise ResourceNotFound("Không tìm thấy bác sĩ")
         return doctor
 
     async def get_doctor_schedule(self, doctor_id: int):
         doctor = await self.doctor_repo.get_active_by_id(doctor_id)
         if doctor is None:
-            raise ValueError("Không tìm thấy bác sĩ")
+            raise ResourceNotFound("Không tìm thấy bác sĩ")
         schedules = await self.schedule_repo.get_by_doctor(doctor_id)
         return schedules
 
@@ -604,7 +607,7 @@ class DoctorService:
         slot_data: ScheduleSlotUpdate,
     ):
         if slot.status == ScheduleSlotStatus.BOOKED:
-            raise ValueError("Khung giờ đã đặt không thể sửa")
+            raise BadRequestException("Khung giờ đã đặt không thể sửa")
         update_data = slot_data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(slot, field, value)
@@ -613,16 +616,16 @@ class DoctorService:
     async def create_doctor(self, doctor_data: DoctorCreate):
         user = await self.user_repo.get_by_id(doctor_data.user_id)
         if user is None:
-            raise ValueError("Không tìm thấy người dùng")
+            raise ResourceNotFound("Không tìm thấy người dùng")
         if user.role != UserRole.DOCTOR:
-            raise ValueError("Người dùng không phải bác sĩ")
+            raise BadRequestException("Người dùng không phải bác sĩ")
         if await self.doctor_repo.get_by_user_id(doctor_data.user_id):
-            raise ValueError("Hồ sơ bác sĩ đã tồn tại")
+            raise ConflictException("Hồ sơ bác sĩ đã tồn tại")
         specialty = await self.specialty_repo.get_active_by_id(doctor_data.specialty_id)
         if specialty is None:
-            raise ValueError("Không tìm thấy chuyên khoa")
+            raise ResourceNotFound("Không tìm thấy chuyên khoa")
         if await self.doctor_repo.get_by_license(doctor_data.license_number):
-            raise ValueError("Giấy phép đã tồn tại")
+            raise ConflictException("Giấy phép đã tồn tại")
         doctor = Doctor(
             id=doctor_data.user_id, **doctor_data.model_dump(exclude={"user_id"})
         )
@@ -647,13 +650,13 @@ class PatientService:
     async def get_owned_medical_record(self, patient_id: int) -> MedicalRecord:
         record = await self.medical_record_repo.get_by_patient_id(patient_id)
         if record is None:
-            raise ValueError("Không tìm thấy hồ sơ bệnh án")
+            raise ResourceNotFound("Không tìm thấy hồ sơ bệnh án")
         return record
 
     async def get_profile_by_user_id(self, user_id: int) -> Patient:
         patient = await self.patient_repo.get_by_user_id(user_id)
         if patient is None:
-            raise ValueError("Không tìm thấy hồ sơ bệnh nhân")
+            raise ResourceNotFound("Không tìm thấy hồ sơ bệnh nhân")
         return patient
 
     async def get_patient_medical_history(self, patient_id: int) -> dict:
@@ -669,22 +672,20 @@ class PatientService:
     ) -> dict:
         patient = await self.patient_repo.get_by_id(patient_id)
         if not patient:
-            raise ValueError("Patient not found")
+            raise ResourceNotFound("Không tìm thấy bệnh nhân")
         if current_user.role == UserRole.ADMIN:
             pass
         elif current_user.role == UserRole.DOCTOR:
             doctor = await self.doctor_repo.get_by_user_id(current_user.id)
             if not doctor:
-                raise ValueError("Doctor profile not found")
+                raise ResourceNotFound("Không tìm thấy hồ sơ bác sĩ")
             has_access = await self.appointment_repo.exists_by_doctor_and_patient(
                 doctor.id, patient_id
             )
             if not has_access:
-                raise ValueError(
-                    "You are not authorized to view this patient's records"
-                )
+                raise ForbiddenException("Bạn không có quyền xem hồ sơ bệnh án của bệnh nhân này")
         else:
-            raise ValueError("Only doctors and admins can access")
+            raise ForbiddenException("Chỉ bác sĩ và quản trị viên mới có quyền truy cập")
         medical_record = await self.medical_record_repo.get_by_patient_id(patient_id)
         examinations = await self.examination_repo.get_by_patient(patient_id)
         return {"medical_record": medical_record, "examinations": examinations}
@@ -702,7 +703,20 @@ class ScheduleService:
     async def get_owned_slot(self, slot_id: int, doctor_id: int) -> ScheduleSlot:
         slot = await self.slot_repo.get_by_id_with_schedule(slot_id)
         if slot is None:
-            raise ValueError("Không tìm thấy khung giờ")
+            raise ResourceNotFound("Không tìm thấy khung giờ")
         if slot.schedule.doctor_id != doctor_id:
-            raise ValueError("Bạn không thể truy cập khung giờ của bác sĩ khác")
+            raise ForbiddenException("Bạn không thể truy cập khung giờ của bác sĩ khác")
         return slot
+
+class PaymentService:
+    def __init__(
+            self,
+            payment_repo: PaymentRepoDep,
+    ):
+        self.payment_repo = payment_repo
+
+    async def get_user_payments(self, current_user: User) -> list[PaymentOut]:
+        if current_user.role != UserRole.PATIENT:
+            raise ValueError("Chỉ bệnh nhân mới được xem lịch sử thanh toán", 403)
+        payments = await self.payment_repo.get_by_patient_id(current_user.id)
+        return [PaymentOut.model_validate(p) for p in payments]

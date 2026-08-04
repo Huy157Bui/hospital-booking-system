@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+
 
 from app.dependencies.commons import (
     get_current_user,
@@ -9,7 +9,6 @@ from app.dependencies.commons import (
     check_doctor,
     get_owned_schedule_slot,
 )
-from app.dependencies.db import get_db
 from app.dependencies.services import *
 from app.models import Patient, ScheduleSlot, User, Doctor, Appointment
 from app.schemas import (
@@ -42,26 +41,19 @@ router = APIRouter(prefix="")
     "/register", tags=["Authentication"], response_model=UserOut, status_code=201
 )
 async def register(user_data: UserCreate, auth_service: AuthServiceDep):
-    try:
-        return await auth_service.register(user_data)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return await auth_service.register(user_data)
 
 
 @router.post("/login", tags=["Authentication"], response_model=Token)
 async def login(login_data: LoginRequest, auth_service: AuthServiceDep):
-    try:
-        result = await auth_service.login(login_data.username, login_data.password)
-        user_out = UserOut.model_validate(result["user"])
-        return Token(
-            access_token=result["access_token"],
-            token_type=result["token_type"],
-            user=user_out,
-        )
-    except ValueError as e:
-        if str(e) == "Invalid username or password":
-            raise HTTPException(status_code=401, detail=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+
+    result = await auth_service.login(login_data.username, login_data.password)
+    user_out = UserOut.model_validate(result["user"])
+    return Token(
+        access_token=result["access_token"],
+        token_type=result["token_type"],
+        user=user_out,
+    )
 
 
 @router.get("/users/me", tags=["Users"], response_model=UserOut)
@@ -87,17 +79,14 @@ async def get_my_medical_records(
         examinations=result["examinations"],
     )
 
-
-appointments_router = APIRouter(prefix="/appointments", tags=["Appointments"])
-
-
-@appointments_router.get("/users/me/appointments", response_model=list[AppointmentOut])
+@router.get("/users/me/appointments", response_model=list[AppointmentOut])
 async def get_my_appointments(
     appointment_service: AppointmentServiceDep,
     current_user: User = Depends(get_current_user),
 ):
     return await appointment_service.get_user_appointments(current_user)
 
+appointments_router = APIRouter(prefix="/appointments", tags=["Appointments"])
 
 @appointments_router.post("", response_model=AppointmentOut, status_code=201)
 async def create_appointment(
@@ -105,7 +94,10 @@ async def create_appointment(
     appointment_service: AppointmentServiceDep,
     patient: Patient = Depends(get_current_patient_profile),
 ):
-    return await appointment_service.create_appointment(patient, appointment_data)
+    return await appointment_service.create_appointment(
+        patient,
+        appointment_data,
+    )
 
 
 @appointments_router.get("/{appointment_id}", response_model=AppointmentOut)
@@ -130,7 +122,7 @@ async def cancel_appointment(
         appointment_id, current_user, cancel_data
     )
 
-
+# thành cập nhật chung
 @appointments_router.patch("/{appointment_id}/status", response_model=AppointmentOut)
 async def update_appointment_status(
     appointment_id: int,
@@ -162,30 +154,24 @@ async def get_appointment_record(
 ):
     return await appointment_service.get_appointment_record(appointment)
 
-@appointments_router.post("/{appointment_id}/payment", response_model=PaymentOut, status_code=201)
+
+@appointments_router.post(
+    "/{appointment_id}/payment", response_model=PaymentOut, status_code=201
+)
 async def create_payment(
     appointment_id: int,
     payment_data: PaymentCreate | None = None,
     appointment_service: AppointmentServiceDep = Depends(),
     current_user: User = Depends(get_current_user),
 ):
-    try:
-        payment_method = payment_data.payment_method if payment_data else None
-        payment = await appointment_service.create_payment(
-            appointment_id,
-            current_user,
-            payment_method,
-        )
-        return PaymentOut.model_validate(payment)
-    except ValueError as e:
-        msg = str(e)
-        if "not found" in msg.lower():
-            raise HTTPException(status_code=404, detail=msg)
-        elif "only patient" in msg.lower() or "not the owner" in msg.lower():
-            raise HTTPException(status_code=403, detail=msg)
-        elif "already exists" in msg.lower():
-            raise HTTPException(status_code=409, detail=msg)
-        raise HTTPException(status_code=400, detail=msg)
+    payment_method = payment_data.payment_method if payment_data else None
+    payment = await appointment_service.create_payment(
+        appointment_id,
+        current_user,
+        payment_method,
+    )
+    return PaymentOut.model_validate(payment)
+
 
 specialties_router = APIRouter(prefix="/specialties", tags=["Specialties"])
 
@@ -197,10 +183,7 @@ async def get_specialties(specialty_service: SpecialtyServiceDep):
 
 @specialties_router.get("/{specialty_id}", response_model=SpecialtyOut)
 async def get_specialty(specialty_id: int, specialty_service: SpecialtyServiceDep):
-    try:
-        return await specialty_service.get_specialty(specialty_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    return await specialty_service.get_specialty(specialty_id)
 
 
 doctors_router = APIRouter(prefix="/doctors", tags=["Doctors"])
@@ -216,22 +199,14 @@ async def get_doctors(
 
 @doctors_router.get("/{doctor_id}", response_model=DoctorOut)
 async def get_doctor(doctor_id: int, doctor_service: DoctorServiceDep):
-    try:
-        return await doctor_service.get_doctor(doctor_id)
-    except ValueError as e:
-        if str(e) == "Doctor not found":
-            raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+
+    return await doctor_service.get_doctor(doctor_id)
 
 
 @doctors_router.get("/{doctor_id}/schedule", response_model=DoctorScheduleOut)
 async def get_doctor_schedule(doctor_id: int, doctor_service: DoctorServiceDep):
-    try:
-        return await doctor_service.get_doctor_schedule(doctor_id)
-    except ValueError as e:
-        if str(e) == "Doctor not found":
-            raise HTTPException(status_code=404, detail=str(e))
-        raise HTTPException(status_code=400, detail=str(e))
+
+    return await doctor_service.get_doctor_schedule(doctor_id)
 
 
 @doctors_router.get("/me/schedule")
@@ -250,12 +225,9 @@ async def update_my_schedule(
     doctor_service: DoctorServiceDep,
     current_doctor: User = Depends(check_doctor),
 ):
-    try:
-        return await doctor_service.update_my_schedule(
-            current_doctor, schedule_id, schedule_data
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    return await doctor_service.update_my_schedule(
+        current_doctor, schedule_id, schedule_data
+    )
 
 
 @doctors_router.patch("/me/schedule-slots/{slot_id}", response_model=ScheduleSlotOut)
@@ -269,30 +241,29 @@ async def update_my_schedule_slot(
 
 patients_router = APIRouter(prefix="/patients", tags=["Patients"])
 
+
 @patients_router.get(
-    "/{patient_id}/medical-records",
-    response_model=PatientMedicalHistoryOut
+    "/{patient_id}/medical-records", response_model=PatientMedicalHistoryOut
 )
 async def get_patient_medical_records(
     patient_id: int,
     patient_service: PatientServiceDep,
     current_user: User = Depends(get_current_user),
 ):
-    try:
-        result = await patient_service.get_patient_medical_history_with_access(
-            patient_id, current_user
-        )
-        return PatientMedicalHistoryOut(
-            medical_record=result["medical_record"],
-            examinations=result["examinations"],
-        )
-    except ValueError as e:
-        msg = str(e)
-        if "not found" in msg.lower():
-            raise HTTPException(status_code=404, detail=msg)
-        elif "not authorized" in msg.lower() or "only doctors" in msg.lower():
-            raise HTTPException(status_code=403, detail=msg)
-        else:
-            raise HTTPException(status_code=400, detail=msg)
-    except Exception as e:
-        raise HTTPException(status_code=500)
+    result = await patient_service.get_patient_medical_history_with_access(
+        patient_id, current_user
+    )
+    return PatientMedicalHistoryOut(
+        medical_record=result["medical_record"],
+        examinations=result["examinations"],
+    )
+
+@router.get("users/me/payments",response_model=list[PaymentOut])
+async def get_my_payments(
+    payment_service: PaymentServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    return await payment_service.get_user_payments(current_user)
+
+
+payments_router = APIRouter(prefix="/payments", tags=["Payments"])

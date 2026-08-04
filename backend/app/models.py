@@ -141,7 +141,7 @@ class Specialty(Base):
     phone = Column(String(50), nullable=True)
     email = Column(String(50), nullable=True)
     working_hours = Column(String(50), nullable=True)
-    status = Column(Enum(ScheduleStatus), nullable=False, default=SpecialtyStatus.ACTIVE)
+    status = Column(Enum(SpecialtyStatus), nullable=False, default=SpecialtyStatus.ACTIVE)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
     # 1-n
@@ -240,13 +240,13 @@ class Examination(Base):
     conclusion = Column(String(500), nullable=True)
     disease_name = Column(String(200), nullable=True)
     height = Column(Float, nullable=True)
-    weight = Column(Float, nullable=True)
+    weight = Column(Float, nullable=True) #tạo bảng chứa: giá trị và value
     blood_pressure = Column(String(20), nullable=True)
     heart_rate = Column(Integer, nullable=True)
     temperature = Column(Float, nullable=True)
     note = Column(String(500), nullable=True)
-    examined_at = Column(DateTime, nullable=True)
-    status = Column(String(50), nullable=False, default="in_progress")
+    examined_at = Column(DateTime, nullable=True) # dia diem
+    status = Column(String(20), nullable=False, default="in_progress")
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
 

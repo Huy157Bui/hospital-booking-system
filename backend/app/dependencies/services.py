@@ -114,3 +114,8 @@ def get_schedule_service(
         slot_repo=slot_repo,
     )
 ScheduleServiceDep = Annotated[ScheduleService, Depends(get_schedule_service)]
+
+def get_payment_service(payment_repo: PaymentRepoDep) -> PaymentService:
+    return PaymentService(payment_repo=payment_repo)
+
+PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]

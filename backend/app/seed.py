@@ -60,7 +60,7 @@ async def seed():
             password="hashed_password",
             email="admin@hospital.com",
             phone="0900000000",
-            role=UserRole.admin,
+            role=UserRole.ADMIN,
             is_active=True,
             last_login=datetime.now(UTC),
         )
@@ -94,7 +94,7 @@ async def seed():
                 password="hashed_password",
                 email=d["email"],
                 phone=d["phone"],
-                role=UserRole.doctor,
+                role=UserRole.DOCTOR,
                 is_active=True,
                 last_login=datetime.now(UTC),
             )
@@ -129,7 +129,7 @@ async def seed():
                 password="hashed_password",
                 email=p["email"],
                 phone=p["phone"],
-                role=UserRole.patient,
+                role=UserRole.PATIENT,
                 is_active=True,
                 last_login=datetime.now(UTC),
             )
@@ -159,7 +159,7 @@ async def seed():
             pat = Patient(
                 id=u.id,
                 date_of_birth=date(1990 + i, 1 + i, 10 + i),
-                gender=Gender.female if i % 2 == 0 else Gender.male,
+                gender=Gender.FEMALE if i % 2 == 0 else Gender.MALE,
                 address=f"{i + 1} Lê Duẩn, Quận 1",
                 identity_number=f"ID{i + 1000:06d}",
                 insurance_number=f"INS{i + 2000:06d}",
@@ -207,7 +207,7 @@ async def seed():
             booked_at=datetime.now(UTC),
             reason="Đau đầu, chóng mặt",
             note="Cần khám sớm",
-            status=AppointmentStatus.confirmed,
+            status=AppointmentStatus.CONFIRMED,
         )
         db.add(appt)
         slot.status = ScheduleSlotStatus.BOOKED
@@ -221,7 +221,7 @@ async def seed():
             booked_at=datetime.now(UTC),
             reason="Khám tổng quát",
             note="",
-            status=AppointmentStatus.pending,
+            status=AppointmentStatus.PENDING,
         )
         db.add(appt2)
         slot2.status = ScheduleSlotStatus.BOOKED
