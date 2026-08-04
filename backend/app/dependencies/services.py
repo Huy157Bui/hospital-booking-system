@@ -119,3 +119,11 @@ def get_payment_service(payment_repo: PaymentRepoDep) -> PaymentService:
     return PaymentService(payment_repo=payment_repo)
 
 PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]
+
+async def get_report_service(
+    payment_repo: PaymentRepoDep,
+    report_repo: ReportRepoDep
+) -> ReportService:
+    return ReportService(payment_repo=payment_repo, report_repo=report_repo)
+
+ReportServiceDep = Annotated[ReportService, Depends(get_report_service)]

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from app.dependencies.commons import check_admin
 from app.dependencies.services import *
 from app.models import User
@@ -46,3 +46,48 @@ async def create_doctor(
     current_admin: User = Depends(check_admin),
 ):
         return await doctor_service.create_doctor(doctor_data)
+
+reports_router = APIRouter(prefix="/reports", tags=["Reports"])
+
+@reports_router.get(
+    "/revenue",
+    response_model=RevenueResponse,
+)
+async def get_revenue_report(
+    start_date: datetime = Query(...),
+    end_date: datetime = Query(...),
+    doctor_id: int | None = Query(None),
+    report_service: ReportServiceDep = None,
+    current_admin: User = Depends(check_admin),
+):
+    return await report_service.get_revenue_report(
+        start_date, end_date, doctor_id, current_admin
+    )
+
+@reports_router.get(
+    "/patients-by-specialty",
+    response_model=PatientsBySpecialtyResponse
+)
+async def get_patients_by_specialty(
+    start_date: datetime | None = Query(None),
+    end_date: datetime | None = Query(None),
+    report_service: ReportServiceDep = None,
+    current_admin: User = Depends(check_admin),
+):
+    return await report_service.get_patients_by_specialty(
+        start_date, end_date, current_admin
+    )
+
+@reports_router.get(
+    "/appointments-summary",
+    response_model=AppointmentsSummaryResponse,
+)
+async def get_appointments_summary(
+    start_date: datetime | None = Query(None),
+    end_date: datetime | None = Query(None),
+    report_service: ReportServiceDep = None,
+    current_admin: User = Depends(check_admin),
+):
+    return await report_service.get_appointments_summary(
+        start_date, end_date, current_admin
+    )

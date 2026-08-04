@@ -1,7 +1,8 @@
+import datetime
 from datetime import date
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, cast
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import exists, func, select, distinct, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -24,6 +25,7 @@ from app.models import (
     Specialty,
     User,
     SpecialtyStatus,
+    PaymentStatus,
 )
 
 ModelType = TypeVar("ModelType", bound=Base)
@@ -597,3 +599,116 @@ class PaymentRepository(BaseRepository[Payment]):
             .order_by(Payment.created_date.desc())
         )
         return list(result.scalars().all())
+
+    async def get_revenue_payments(
+        self, start_date: datetime, end_date: datetime, doctor_id: int | None = None
+    ) -> list[Payment]:
+        query = (
+            select(Payment)
+            .join(Appointment, Payment.appointment_id == Appointment.id)
+            .join(ScheduleSlot, Appointment.slot_id == ScheduleSlot.id)
+            .join(Schedule, ScheduleSlot.schedule_id == Schedule.id)
+            .join(Doctor, Schedule.doctor_id == Doctor.id)
+            .where(
+                Payment.status == PaymentStatus.SUCCESS,
+                Payment.created_date >= start_date,
+                Payment.created_date <= end_date,
+            )
+            .options(
+                selectinload(Payment.appointment)
+                .selectinload(Appointment.patient)
+                .selectinload(Patient.user),
+                selectinload(Payment.appointment)
+                .selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.user),
+            )
+            .order_by(Payment.created_date.desc())
+        )
+
+        if doctor_id is not None:
+            query = query.where(Doctor.id == doctor_id)
+
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
+class ReportRepository(BaseRepository[Appointment]):
+    def __init__(self, db: AsyncSession):
+        super().__init__(Appointment, db)
+
+    async def get_patient_count_by_specialty(
+        self, start_date: datetime | None = None, end_date: datetime | None = None
+    ) -> list[tuple[int, str, int]]:
+        query = (
+            select(
+                Specialty.id,
+                Specialty.name,
+                func.count(distinct(Appointment.patient_id)).label("patient_count"),
+            )
+            .join(Doctor, Specialty.id == Doctor.specialty_id)
+            .join(Schedule, Doctor.id == Schedule.doctor_id)
+            .join(ScheduleSlot, Schedule.id == ScheduleSlot.schedule_id)
+            .join(Appointment, ScheduleSlot.id == Appointment.slot_id)
+            .where(Appointment.status.in_(["COMPLETED", "PAID"]))
+        )
+
+        if start_date:
+            query = query.where(Appointment.created_date >= start_date)
+        if end_date:
+            query = query.where(Appointment.created_date <= end_date)
+
+        query = query.group_by(Specialty.id, Specialty.name)
+        result = await self.db.execute(query)
+        return result.all()
+
+    async def get_total_unique_patients(self, start_date=None, end_date=None) -> int:
+        query = select(func.count(distinct(Appointment.patient_id))).where(
+            Appointment.status.in_(
+                [AppointmentStatus.COMPLETED, AppointmentStatus.PAID]
+            )
+        )
+        if start_date:
+            query = query.where(Appointment.created_date >= start_date)
+        if end_date:
+            query = query.where(Appointment.created_date <= end_date)
+        result = await self.db.execute(query)
+        return result.scalar_one()
+
+    async def get_appointment_summary(
+        self, start_date: datetime | None = None, end_date: datetime | None = None
+    ):
+        conditions = []
+        if start_date:
+            conditions.append(Appointment.created_date >= start_date)
+        if end_date:
+            conditions.append(Appointment.created_date <= end_date)
+        query_status = (
+            select(Appointment.status, func.count().label("count"))
+            .where(*conditions)
+            .group_by(Appointment.status)
+        )
+        result_status = await self.db.execute(query_status)
+        status_counts = result_status.all()
+
+        query_daily = (
+            select(
+                cast(Appointment.created_date, Date).label("day"),
+                Appointment.status,
+                func.count().label("count"),
+            )
+            .where(*conditions)
+            .group_by(cast(Appointment.created_date, Date), Appointment.status)
+            .order_by("day")
+        )
+        result_daily = await self.db.execute(query_daily)
+        daily_rows = result_daily.all()  # list of (day, status, count)
+
+        query_total = select(func.count()).select_from(Appointment).where(*conditions)
+        total = await self.db.scalar(query_total)
+
+        return {
+            "total": total,
+            "status_counts": status_counts,
+            "daily_rows": daily_rows
+        }

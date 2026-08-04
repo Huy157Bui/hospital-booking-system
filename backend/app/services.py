@@ -5,6 +5,7 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from passlib.exc import InvalidTokenError
 from sqlalchemy import DECIMAL
+from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import settings
@@ -43,6 +44,13 @@ from app.schemas import (
     ExaminationRecordCreate,
     ExaminationOut,
     PaymentOut,
+    RevenueResponse,
+    RevenueItem,
+    PatientsBySpecialtyResponse,
+    PatientsBySpecialtyItem,
+    AppointmentsSummaryResponse,
+    DailyAppointmentSummary,
+    AppointmentStatusCount,
 )
 from app.dependencies.repos import *
 from app.utils import generate_record_number
@@ -717,6 +725,114 @@ class PaymentService:
 
     async def get_user_payments(self, current_user: User) -> list[PaymentOut]:
         if current_user.role != UserRole.PATIENT:
-            raise ValueError("Chỉ bệnh nhân mới được xem lịch sử thanh toán", 403)
+            raise ForbiddenException("Chỉ bệnh nhân mới được xem lịch sử thanh toán")
         payments = await self.payment_repo.get_by_patient_id(current_user.id)
         return [PaymentOut.model_validate(p) for p in payments]
+
+class ReportService:
+    def __init__(self, payment_repo: PaymentRepoDep, report_repo: ReportRepoDep):
+        self.payment_repo = payment_repo
+        self.report_repo = report_repo
+
+    async def get_revenue_report(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        doctor_id: int | None,
+        current_user: User
+    ) -> RevenueResponse:
+        if current_user.role != UserRole.ADMIN:
+            raise ForbiddenException("Chỉ ADMIN mới được xem")
+
+        payments = await self.payment_repo.get_revenue_payments(
+            start_date, end_date, doctor_id
+        )
+
+        total_revenue = Decimal(0)
+        items = []
+        for payment in payments:
+            total_revenue += payment.amount
+            doctor_user = payment.appointment.slot.schedule.doctor.user
+            patient_user = payment.appointment.patient.user
+            items.append(
+                RevenueItem(
+                    payment_id=payment.id,
+                    amount=payment.amount,
+                    status=payment.status,
+                    payment_method=payment.payment_method,
+                    created_date=payment.created_date,
+                    doctor_name=doctor_user.full_name,
+                    doctor_id=doctor_user.id,
+                    patient_name=patient_user.full_name,
+                    appointment_id=payment.appointment_id,
+                )
+            )
+        return RevenueResponse(
+            total_revenue=total_revenue, total_transactions=len(items), items=items
+        )
+
+    async def get_patients_by_specialty(
+        self, start_date: datetime | None, end_date: datetime | None, current_user: User
+    ) -> PatientsBySpecialtyResponse:
+        if current_user.role != UserRole.ADMIN:
+            raise ForbiddenException("Chỉ ADMIN mới được xem")
+
+        results = await self.report_repo.get_patient_count_by_specialty(
+            start_date, end_date
+        )
+        items = []
+        total = 0
+        for specialty_id, specialty_name, count in results:
+            items.append(
+                PatientsBySpecialtyItem(
+                    specialty_id=specialty_id,
+                    specialty_name=specialty_name,
+                    patient_count=count,
+                )
+            )
+            total += count
+
+        total_patients = await self.report_repo.get_total_unique_patients(
+            start_date, end_date
+        )
+
+        return PatientsBySpecialtyResponse(items=items)
+
+    async def get_appointments_summary(
+        self, start_date: datetime | None, end_date: datetime | None, current_user: User
+    ) -> AppointmentsSummaryResponse:
+        if current_user.role != UserRole.ADMIN:
+            raise ForbiddenException("Chỉ ADMIN mới được xem")
+
+        data = await self.report_repo.get_appointment_summary(start_date, end_date)
+
+        by_status = [
+            AppointmentStatusCount(status=status, count=count)
+            for status, count in data["status_counts"]
+        ]
+
+        daily_dict = {}
+        for day, status, count in data["daily_rows"]:
+            if day not in daily_dict:
+                daily_dict[day] = {}
+            daily_dict[day][status] = count
+
+        daily_summary = []
+        for day, status_counts in daily_dict.items():
+            total = sum(status_counts.values())
+            daily_summary.append(
+                DailyAppointmentSummary(
+                    date=day,
+                    total=total,
+                    by_status=status_counts
+                )
+            )
+        daily_summary.sort(key=lambda x: x.date)
+
+        return AppointmentsSummaryResponse(
+            total_appointments=data["total"],
+            by_status=by_status,
+            daily_summary=daily_summary,
+            start_date=start_date.date() if start_date else None,
+            end_date=end_date.date() if end_date else None
+        )

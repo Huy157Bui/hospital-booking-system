@@ -1,6 +1,6 @@
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Dict
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -111,6 +111,14 @@ class PatientOut(PatientBase):
     class Config:
         from_attributes = True
 
+class PatientsBySpecialtyItem(BaseModel):
+    specialty_id: int
+    specialty_name: str
+    patient_count: int
+
+class PatientsBySpecialtyResponse(BaseModel):
+    items: list[PatientsBySpecialtyItem]
+    total_patients: int
 
 class DoctorBase(BaseModel):
     specialty_id: int
@@ -282,6 +290,21 @@ class AppointmentOut(AppointmentBase):
     class Config:
         from_attributes = True
 
+class AppointmentStatusCount(BaseModel):
+    status: str
+    count: int
+
+class DailyAppointmentSummary(BaseModel):
+    date: date
+    total: int
+    by_status: Dict[str, int]
+
+class AppointmentsSummaryResponse(BaseModel):
+    total_appointments: int
+    by_status: list[AppointmentStatusCount]
+    daily_summary: list[DailyAppointmentSummary]
+    start_date: date | None
+    end_date: date | None
 
 class MedicalRecordBase(BaseModel):
     patient_id: int
@@ -528,6 +551,30 @@ class PaymentOut(PaymentBase):
 
     class Config:
         from_attributes = True
+
+class RevenueFilter(BaseModel):
+    start_date: datetime = Field(..., description="Thời gian bắt đầu (ISO format)")
+    end_date: datetime = Field(..., description="Thời gian kết thúc (ISO format)")
+    doctor_id: int | None = Field(None, description="ID bác sĩ (nếu có)")
+
+class RevenueItem(BaseModel):
+    payment_id: int
+    amount: Decimal
+    status: str
+    payment_method: str | None
+    created_date: datetime
+    doctor_name: str
+    doctor_id: int
+    patient_name: str | None
+    appointment_id: int
+
+    class Config:
+        from_attributes = True
+
+class RevenueResponse(BaseModel):
+    total_revenue: Decimal = Field(..., description="Tổng doanh thu")
+    total_transactions: int = Field(..., description="Số giao dịch thành công")
+    items: list[RevenueItem] = Field(..., description="Chi tiết các giao dịch")
 
 DoctorOut.model_rebuild()
 
