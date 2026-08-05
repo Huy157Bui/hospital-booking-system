@@ -1,9 +1,7 @@
 from typing import Annotated
 
 from fastapi import Depends
-
-from app.dependencies.services import get_appointment_service, get_specialty_service
-from app.dependencies.db import get_db, DbDep
+from app.dependencies.db import DbDep
 from app.repositories import (
     AppointmentRepository,
     DoctorRepository,
@@ -20,7 +18,6 @@ from app.repositories import (
     PaymentRepository,
     ReportRepository,
 )
-from app.services import AppointmentService, SpecialtyService
 
 
 
@@ -36,7 +33,7 @@ AppointmentRepoDep = Annotated[
 ]
 
 def get_schedule_repository(db: DbDep) -> ScheduleRepository:
-    return DoctorRepository(db)
+    return ScheduleRepository(db)
 
 ScheduleRepoDep = Annotated[
     ScheduleRepository,

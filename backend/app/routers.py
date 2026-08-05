@@ -160,8 +160,8 @@ async def get_appointment_record(
 )
 async def create_payment(
     appointment_id: int,
+    appointment_service: AppointmentServiceDep,
     payment_data: PaymentCreate | None = None,
-    appointment_service: AppointmentServiceDep = Depends(),
     current_user: User = Depends(get_current_user),
 ):
     payment_method = payment_data.payment_method if payment_data else None
@@ -203,17 +203,16 @@ async def get_doctor(doctor_id: int, doctor_service: DoctorServiceDep):
     return await doctor_service.get_doctor(doctor_id)
 
 
-@doctors_router.get("/{doctor_id}/schedule", response_model=DoctorScheduleOut)
+@doctors_router.get("/{doctor_id}/schedule", response_model=list[DoctorScheduleOut])
 async def get_doctor_schedule(doctor_id: int, doctor_service: DoctorServiceDep):
 
     return await doctor_service.get_doctor_schedule(doctor_id)
 
 
-@doctors_router.get("/me/schedule")
+@doctors_router.get("/me/schedule", response_model=list[ScheduleOut])
 async def get_my_schedule(
     doctor_service: DoctorServiceDep,
     current_user: User = Depends(check_doctor),
-    response_model=list[ScheduleOut],
 ):
     return await doctor_service.get_my_schedule(current_user)
 
@@ -258,7 +257,7 @@ async def get_patient_medical_records(
         examinations=result["examinations"],
     )
 
-@router.get("users/me/payments",response_model=list[PaymentOut])
+@router.get("/users/me/payments",response_model=list[PaymentOut])
 async def get_my_payments(
     payment_service: PaymentServiceDep,
     current_user: User = Depends(get_current_user),
@@ -267,3 +266,11 @@ async def get_my_payments(
 
 
 payments_router = APIRouter(prefix="/payments", tags=["Payments"])
+
+@payments_router.get("/{payment_id}", response_model=PaymentOut)
+async def get_payment_detail(
+    payment_id: int,
+    payment_service: PaymentServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    return await payment_service.get_payment_detail(payment_id, current_user)

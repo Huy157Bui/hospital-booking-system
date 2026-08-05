@@ -1,12 +1,9 @@
 from datetime import UTC, datetime, timedelta, date
-from typing import Annotated
-from fastapi import Depends
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from passlib.exc import InvalidTokenError
 from sqlalchemy import DECIMAL
 from decimal import Decimal
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import settings
 from app.exceptions import (
@@ -136,6 +133,7 @@ class AuthService:
             raise ForbiddenException("Tài khoản bị vô hiệu hóa")
 
         user.last_login = datetime.now(UTC)
+        #user.updated_date = datetime.now(UTC)
         await self.user_repo.update(user)
 
         access_token = create_access_token(
@@ -240,9 +238,6 @@ class AppointmentService:
         if slot.status != ScheduleSlotStatus.AVAILABLE:
             raise BadRequestException("Khung giờ không khả dụng")
 
-        if getattr(slot, "appointment", None) is not None:
-            raise ConflictException("Khung giờ đã được đặt")
-
         existing = await self.appointment_repo.get_by_slot_id(appointment_data.slot_id)
         if existing is not None:
             raise ConflictException("Khung giờ đã được đặt")
@@ -252,13 +247,10 @@ class AppointmentService:
             slot_id=slot.id,
             status=AppointmentStatus.PENDING,
         )
-        await self.appointment_repo.create(appointment)
+        appointment = await self.appointment_repo.create_with_slot(appointment)
 
         slot.status = ScheduleSlotStatus.BOOKED
-        slot.appointment = appointment
-
-        await self.appointment_repo.commit()
-        await self.appointment_repo.refresh(appointment)
+        await self.slot_repo.update(slot)
 
         return appointment
 
@@ -606,7 +598,7 @@ class DoctorService:
         doctor = await self.doctor_repo.get_active_by_id(doctor_id)
         if doctor is None:
             raise ResourceNotFound("Không tìm thấy bác sĩ")
-        schedules = await self.schedule_repo.get_by_doctor(doctor_id)
+        schedules = await self.schedule_repo.get_doctor_available_schedule(doctor_id)
         return schedules
 
     async def update_my_schedule_slot(
@@ -716,10 +708,11 @@ class ScheduleService:
             raise ForbiddenException("Bạn không thể truy cập khung giờ của bác sĩ khác")
         return slot
 
+
 class PaymentService:
     def __init__(
-            self,
-            payment_repo: PaymentRepoDep,
+        self,
+        payment_repo: PaymentRepoDep,
     ):
         self.payment_repo = payment_repo
 
@@ -728,6 +721,22 @@ class PaymentService:
             raise ForbiddenException("Chỉ bệnh nhân mới được xem lịch sử thanh toán")
         payments = await self.payment_repo.get_by_patient_id(current_user.id)
         return [PaymentOut.model_validate(p) for p in payments]
+
+    async def get_payment_detail(
+        self, payment_id: int, current_user: User
+    ) -> PaymentOut:
+        payment = await self.payment_repo.get_by_id_with_appointment(payment_id)
+        if not payment:
+            raise ResourceNotFound("Không tìm thấy giao dịch")
+        if current_user.role == UserRole.ADMIN:
+            return PaymentOut.model_validate(payment)
+
+        if current_user.role == UserRole.PATIENT:
+            if payment.appointment.patient_id != current_user.id:
+                raise ForbiddenException("Bạn không có quyền xem giao dịch này")
+            return PaymentOut.model_validate(payment)
+
+        raise ForbiddenException("Bạn không có quyền truy cập giao dịch này")
 
 class ReportService:
     def __init__(self, payment_repo: PaymentRepoDep, report_repo: ReportRepoDep):

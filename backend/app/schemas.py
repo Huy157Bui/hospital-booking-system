@@ -1,6 +1,6 @@
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Optional, Dict
+from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -35,7 +35,6 @@ class UserCreate(UserBase):
         if not any(c.isdigit() for c in v):
             raise ValueError("Password must contain at least one digit")
         return v
-
 
 class UserUpdate(BaseModel):
     username: str | None = None
@@ -216,8 +215,8 @@ class ScheduleSlotOut(ScheduleSlotBase):
     id: int
     created_date: datetime
     updated_date: datetime | None = None
-    start_time: datetime
-    end_time: datetime
+    start_time: time
+    end_time: time
     schedule_id: int
     # appointment: Optional["AppointmentOut"] = None
 
@@ -297,7 +296,7 @@ class AppointmentStatusCount(BaseModel):
 class DailyAppointmentSummary(BaseModel):
     date: date
     total: int
-    by_status: Dict[str, int]
+    by_status: dict[str, int]
 
 class AppointmentsSummaryResponse(BaseModel):
     total_appointments: int

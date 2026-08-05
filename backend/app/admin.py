@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, Depends, Query
 from app.dependencies.commons import check_admin
 from app.dependencies.services import *
@@ -8,6 +10,9 @@ from app.schemas import (
     SpecialtyCreate,
     SpecialtyOut,
     SpecialtyUpdate,
+    AppointmentsSummaryResponse,
+    PatientsBySpecialtyResponse,
+    RevenueResponse,
 )
 
 router = APIRouter(prefix="/admin", tags=["Admin"])

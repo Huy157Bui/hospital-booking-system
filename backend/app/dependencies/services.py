@@ -1,5 +1,36 @@
-from app.dependencies.repos import *
-from app.services import *
+from typing import Annotated
+
+from fastapi import Depends
+
+
+from app.dependencies.repos import (
+    AppointmentRepoDep,
+    DoctorRepoDep,
+    ExaminationRepoDep,
+    MedicalRecordRepoDep,
+    MedicineRepoDep,
+    PatientRepoDep,
+    PaymentRepoDep,
+    PrescriptionDetailRepoDep,
+    PrescriptionRepoDep,
+    ReportRepoDep,
+    ScheduleRepoDep,
+    ScheduleSlotRepoDep,
+    SpecialtyRepoDep,
+    UserRepoDep,
+)
+
+from app.services import (
+    AppointmentService,
+    AuthService,
+    DoctorService,
+    PatientService,
+    PaymentService,
+    ReportService,
+    ScheduleService,
+    SpecialtyService,
+    UserService,
+)
 
 
 def get_appointment_service(
@@ -113,16 +144,20 @@ def get_schedule_service(
         schedule_repo=schedule_repo,
         slot_repo=slot_repo,
     )
+
+
 ScheduleServiceDep = Annotated[ScheduleService, Depends(get_schedule_service)]
+
 
 def get_payment_service(payment_repo: PaymentRepoDep) -> PaymentService:
     return PaymentService(payment_repo=payment_repo)
 
+
 PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]
 
+
 async def get_report_service(
-    payment_repo: PaymentRepoDep,
-    report_repo: ReportRepoDep
+    payment_repo: PaymentRepoDep, report_repo: ReportRepoDep
 ) -> ReportService:
     return ReportService(payment_repo=payment_repo, report_repo=report_repo)
 

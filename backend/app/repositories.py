@@ -1,5 +1,4 @@
-import datetime
-from datetime import date
+from datetime import date, datetime
 from typing import Generic, TypeVar, cast
 
 from sqlalchemy import exists, func, select, distinct, Date
@@ -47,10 +46,14 @@ class BaseRepository(Generic[ModelType]):
     async def create(self, data: ModelType) -> ModelType:
         self.db.add(data)
         await self.db.flush()
+        await self.db.refresh(data)
+        await self.db.commit()
         return data
 
     async def update(self, data: ModelType) -> ModelType:
         await self.db.flush()
+        await self.db.refresh(data)
+        await self.db.commit()
         return data
 
     async def delete(self, id: int) -> None:
@@ -58,6 +61,7 @@ class BaseRepository(Generic[ModelType]):
         if obj:
             await self.db.delete(obj)
             await self.db.flush()
+            await self.db.commit()
 
     async def count(self) -> int:
         result = await self.db.execute(select(self.model))
@@ -224,6 +228,31 @@ class ScheduleRepository(BaseRepository[Schedule]):
     def __init__(self, db: AsyncSession) -> None:
         super().__init__(Schedule, db)
 
+
+    async def get_doctor_available_schedule(
+            self, doctor_id: int, from_date: date | None = None
+    ) -> list[Schedule]:
+        if from_date is None:
+            from_date = date.today()
+
+        stmt = (
+            select(Schedule)
+            .where(
+
+                Schedule.doctor_id == doctor_id,
+                Schedule.work_date >= from_date,
+                Schedule.status == ScheduleStatus.OPEN,
+            )
+            .options(
+                selectinload(Schedule.doctor).selectinload(Doctor.user),
+                selectinload(Schedule.doctor).selectinload(Doctor.specialty),
+                selectinload(Schedule.slots),
+            )
+            .order_by(Schedule.work_date)
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_by_doctor(self, doctor_id: int) -> list[Schedule]:
         result = await self.db.execute(
             select(Schedule)
@@ -360,6 +389,20 @@ class AppointmentRepository(BaseRepository[Appointment]):
             select(Appointment).where(Appointment.slot_id == slot_id)
         )
         return result.scalar_one_or_none()
+
+    async def create_with_slot(self, appointment: Appointment) -> Appointment:
+        self.db.add(appointment)
+        await self.db.flush()
+        stmt = (
+            select(Appointment)
+            .where(Appointment.id == appointment.id)
+            .options(selectinload(Appointment.slot))
+        )
+        result = await self.db.execute(stmt)
+        appointment_loaded = result.scalar_one()
+
+        await self.db.commit()
+        return appointment_loaded
 
     async def get_by_id_with_slot(self, appointment_id: int):
         result = await self.db.execute(
@@ -570,9 +613,7 @@ class MedicineRepository(BaseRepository[Medicine]):
         )
         return result.scalar_one_or_none()
 
-    async def get_active_by_id(
-        self,  medicine_id: int
-    ) -> Medicine | None:
+    async def get_active_by_id(self, medicine_id: int) -> Medicine | None:
         result = await self.db.execute(
             select(Medicine).where(
                 Medicine.id == medicine_id, Medicine.status == "active"
@@ -584,6 +625,14 @@ class MedicineRepository(BaseRepository[Medicine]):
 class PaymentRepository(BaseRepository[Payment]):
     def __init__(self, db: AsyncSession):
         super().__init__(Payment, db)
+
+    async def get_by_id_with_appointment(self, payment_id: int) -> Payment | None:
+        result = await self.db.execute(
+            select(Payment)
+            .options(selectinload(Payment.appointment))
+            .where(Payment.id == payment_id)
+        )
+        return result.scalar_one_or_none()
 
     async def get_by_appointment(self, appointment_id: int) -> Payment | None:
         result = await self.db.execute(
