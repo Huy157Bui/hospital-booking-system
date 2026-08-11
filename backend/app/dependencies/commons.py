@@ -1,6 +1,13 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer
-from app.dependencies.services import *
+from passlib.exc import InvalidTokenError
+from app.dependencies.services import (
+    AuthServiceDep,
+    DoctorServiceDep,
+    PatientServiceDep,
+    ScheduleServiceDep,
+    AppointmentServiceDep,
+)
 from app.models import User, UserRole, Doctor, Patient, Appointment, ScheduleSlot
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")

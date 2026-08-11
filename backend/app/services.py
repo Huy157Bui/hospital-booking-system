@@ -452,7 +452,6 @@ class AppointmentService:
                 prescription.total_amount = total
                 await self.prescription_repo.update(prescription)
 
-        await self.examination_repo.commit()
         await self.examination_repo.refresh(examination)
         return examination
 
@@ -503,7 +502,6 @@ class AppointmentService:
             transaction_id=None,
         )
         await self.payment_repo.create(payment)
-        await self.payment_repo.commit()
         await self.payment_repo.refresh(payment)
 
         appointment.status = AppointmentStatus.PAID

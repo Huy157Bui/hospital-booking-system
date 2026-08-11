@@ -47,13 +47,11 @@ class BaseRepository(Generic[ModelType]):
         self.db.add(data)
         await self.db.flush()
         await self.db.refresh(data)
-        await self.db.commit()
         return data
 
     async def update(self, data: ModelType) -> ModelType:
         await self.db.flush()
         await self.db.refresh(data)
-        await self.db.commit()
         return data
 
     async def delete(self, id: int) -> None:
@@ -61,7 +59,6 @@ class BaseRepository(Generic[ModelType]):
         if obj:
             await self.db.delete(obj)
             await self.db.flush()
-            await self.db.commit()
 
     async def count(self) -> int:
         result = await self.db.execute(select(self.model))
@@ -238,7 +235,6 @@ class ScheduleRepository(BaseRepository[Schedule]):
         stmt = (
             select(Schedule)
             .where(
-
                 Schedule.doctor_id == doctor_id,
                 Schedule.work_date >= from_date,
                 Schedule.status == ScheduleStatus.OPEN,
@@ -400,16 +396,17 @@ class AppointmentRepository(BaseRepository[Appointment]):
         )
         result = await self.db.execute(stmt)
         appointment_loaded = result.scalar_one()
-
-        await self.db.commit()
         return appointment_loaded
 
     async def get_by_id_with_slot(self, appointment_id: int):
-        result = await self.db.execute(
+        stmt = (
             select(Appointment)
-            .options(selectinload(Appointment.slot))
+            .options(
+                selectinload(Appointment.slot).selectinload(ScheduleSlot.schedule)
+            )
             .where(Appointment.id == appointment_id)
         )
+        result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def cancel(self, appointment: Appointment, cancel_reason: str) -> Appointment:
