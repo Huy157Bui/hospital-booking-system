@@ -1,6 +1,5 @@
-export type UserRole = 'PATIENT' | 'DOCTOR' | 'ADMIN' | string;
+export type UserRole = 'patient' | 'doctor';
 
-// Khớp 100% với UserOut Pydantic model
 export interface User {
   id: number;
   username: string;
@@ -15,13 +14,11 @@ export interface User {
   updated_date?: string | null;
 }
 
-// Khớp với LoginRequest
 export interface LoginCredentials {
   username: string;
   password: string;
 }
 
-// Khớp với UserCreate
 export interface RegisterCredentials {
   username: string;
   email: string;
@@ -29,10 +26,8 @@ export interface RegisterCredentials {
   password: string;
   phone?: string;
   avatar?: string;
-  role?: UserRole;
 }
 
-// Khớp với Token model trả về
 export interface TokenResponse {
   access_token: string;
   token_type: string;

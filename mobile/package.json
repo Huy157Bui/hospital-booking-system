@@ -4,8 +4,10 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.9",
+    "@expo/vector-icons": "^15.1.1",
     "axios": "^1.19.0",
     "expo": "~57.0.11",
+    "expo-blur": "^57.0.2",
     "expo-constants": "~57.0.9",
     "expo-device": "~57.0.1",
     "expo-font": "~57.0.0",
