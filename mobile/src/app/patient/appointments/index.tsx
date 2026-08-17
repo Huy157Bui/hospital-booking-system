@@ -5,7 +5,6 @@ import { useRouter } from 'expo-router';
 import { appointmentService } from '../../../services/appointmentService';
 import { AppointmentCard } from '../../../components/appointments/AppointmentCard';
 import { Appointment } from '../../../types/appointment';
-import { specialtyService } from '@/services/specialtyService';
 
 type TabType = 'upcoming' | 'history';
 
@@ -15,16 +14,17 @@ export default function PatientAppointmentsScreen() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const loadData = async () => {
+  const loadAppointments = async (tab: TabType) => {
+  setLoading(true);
   try {
-    const allAppts = await appointmentService.getMyAppointments();
+    const allAppointments = await appointmentService.getMyAppointments();
     const now = new Date();
-    const upcoming = allAppts.filter(a => new Date(a.startTime) > now);
-    setUpcomingAppointments(upcoming);
-    const specs = await specialtyService.getAll();
-    setSpecialties(specs);
+    const filtered = tab === 'upcoming'
+      ? allAppointments.filter(a => new Date(a.startTime) > now)
+      : allAppointments.filter(a => new Date(a.startTime) <= now);
+    setAppointments(filtered);
   } catch (error) {
-    console.error('Home load error:', error);
+    console.error('Load appointments error:', error);
   } finally {
     setLoading(false);
   }
