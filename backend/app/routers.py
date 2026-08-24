@@ -32,6 +32,8 @@ from app.schemas import (
     PatientMedicalHistoryOut,
     PaymentOut,
     PaymentCreate,
+    ChatResponse,
+    ChatRequest,
 )
 
 router = APIRouter(prefix="")
@@ -274,3 +276,17 @@ async def get_payment_detail(
     current_user: User = Depends(get_current_user),
 ):
     return await payment_service.get_payment_detail(payment_id, current_user)
+
+ai_router = APIRouter(prefix="/ai", tags=["Chatbot AI"])
+
+@ai_router.post("/chat", response_model=ChatResponse)
+async def chat_with_ai(
+    request: ChatRequest,
+    ai_service: AIServiceDep,
+):
+    print(f"[DEBUG] request.chat_history = {request.chat_history}")
+    reply = await ai_service.chat_with_agent(
+        user_message=request.message,
+        chat_history=request.chat_history
+    )
+    return ChatResponse(reply=reply)

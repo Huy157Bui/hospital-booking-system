@@ -1,0 +1,497 @@
+[
+  {
+    "STT": 1,
+    "Tên đơn vị": "Trung tâm Khám bệnh và Điều trị trong ngày",
+    "Slug": "trung-tam-kham-benh-va-dieu-tri-trong-ngay",
+    "ID": "bfaf374d-26a9-4d61-b27a-c67a9d38e2b3",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-kham-benh-va-dieu-tri-trong-ngay/bfaf374d-26a9-4d61-b27a-c67a9d38e2b3",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 2,
+    "Tên đơn vị": "Trung tâm Quản lý chất lượng khám, chữa bệnh",
+    "Slug": "trung-tam-quan-ly-chat-luong-kham-chua-benh",
+    "ID": "ee2dab56-cacb-4891-a348-eb7dd0241c30",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-quan-ly-chat-luong-kham-chua-benh/ee2dab56-cacb-4891-a348-eb7dd0241c30",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 3,
+    "Tên đơn vị": "Khoa Hoá Sinh",
+    "Slug": "khoa-hoa-sinh",
+    "ID": "63ccae54-5f68-edbe-7df8-e30776130ee5",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-hoa-sinh/63ccae54-5f68-edbe-7df8-e30776130ee5",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 4,
+    "Tên đơn vị": "Viện Y học nhiệt đới Bạch Mai",
+    "Slug": "vien-y-hoc-nhiet-doi-bach-mai",
+    "ID": "3b0a54be-915b-8b41-90fb-6d3ce8cfbfb0",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-y-hoc-nhiet-doi-bach-mai/3b0a54be-915b-8b41-90fb-6d3ce8cfbfb0",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 5,
+    "Tên đơn vị": "Viện Y Học Hạt Nhân và Ung bướu Bạch Mai",
+    "Slug": "vien-y-hoc-hat-nhan-va-ung-buou-bach-mai",
+    "ID": "fbca559a-a418-979c-db7d-9ee34380c28f",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-y-hoc-hat-nhan-va-ung-buou-bach-mai/fbca559a-a418-979c-db7d-9ee34380c28f",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 6,
+    "Tên đơn vị": "Trường Cao đẳng Y tế Bạch Mai",
+    "Slug": "truong-cao-dang-y-te-bach-mai",
+    "ID": "1b0bf30d-c67a-e74d-3121-bf338c58e0c5",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/truong-cao-dang-y-te-bach-mai/1b0bf30d-c67a-e74d-3121-bf338c58e0c5",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 7,
+    "Tên đơn vị": "Phòng Công nghệ thông tin và Chuyển đổi số",
+    "Slug": "phong-cong-nghe-thong-tin-va-chuyen-doi-so",
+    "ID": "f9eb6b6b-243b-d5dc-c1e3-d8dad0415b2e",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/phong-cong-nghe-thong-tin-va-chuyen-doi-so/f9eb6b6b-243b-d5dc-c1e3-d8dad0415b2e",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 8,
+    "Tên đơn vị": "Khoa Chấn Thương Chỉnh Hình và CS",
+    "Slug": "khoa-chan-thuong-chinh-hinh-va-cs",
+    "ID": "daaca971-3977-6a96-6554-2c3d8e97f46b",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-chan-thuong-chinh-hinh-va-cs/daaca971-3977-6a96-6554-2c3d8e97f46b",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 9,
+    "Tên đơn vị": "Phòng Công tác xã hội và Truyền thông",
+    "Slug": "phong-cong-tac-xa-hoi-va-truyen-thong",
+    "ID": "1187f18a-b7d9-50ce-4bae-2fa7b129c5b9",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/phong-cong-tac-xa-hoi-va-truyen-thong/1187f18a-b7d9-50ce-4bae-2fa7b129c5b9",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 10,
+    "Tên đơn vị": "Khoa Da Liễu và Bỏng",
+    "Slug": "khoa-da-lieu-va-bong",
+    "ID": "12bdf7cd-2316-88ea-6d2b-11355a809eeb",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-da-lieu-va-bong/12bdf7cd-2316-88ea-6d2b-11355a809eeb",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 11,
+    "Tên đơn vị": "Khoa Dược",
+    "Slug": "khoa-duoc",
+    "ID": "bd83534a-4479-23d4-2664-77ef78b4aca4",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-duoc/bd83534a-4479-23d4-2664-77ef78b4aca4",
+    "Địa chỉ": "Tầng 1- Nhà Q- Bệnh viện Bạch Mai",
+    "Số điện thoại": ""
+  },
+  {
+    "STT": 12,
+    "Tên đơn vị": "Viện Xét nghiệm Y học",
+    "Slug": "vien-xet-nghiem-y-hoc",
+    "ID": "e886d456-640c-411e-84cc-7ebe2f635e7f",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-xet-nghiem-y-hoc/e886d456-640c-411e-84cc-7ebe2f635e7f",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 13,
+    "Tên đơn vị": "Viện Đào tạo và Nghiên cứu Y Dược Bạch Mai",
+    "Slug": "vien-dao-tao-va-nghien-cuu-y-duoc-bach-mai",
+    "ID": "186f9f88-631c-ae2f-3ef9-658d72a4eebd",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-dao-tao-va-nghien-cuu-y-duoc-bach-mai/186f9f88-631c-ae2f-3ef9-658d72a4eebd",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 14,
+    "Tên đơn vị": "Phòng Điều dưỡng và chăm sóc người bệnh",
+    "Slug": "phong-dieu-duong-va-cham-soc-nguoi-benh",
+    "ID": "304c9fea-c8c0-7fec-10d6-097501da6dba",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/phong-dieu-duong-va-cham-soc-nguoi-benh/304c9fea-c8c0-7fec-10d6-097501da6dba",
+    "Địa chỉ": null,
+    "Số điện thoại": ""
+  },
+  {
+    "STT": 15,
+    "Tên đơn vị": "Viện Điện quang Chẩn đoán và Can thiệp",
+    "Slug": "vien-dien-quang-chan-doan-va-can-thiep",
+    "ID": "20464b02-8328-4a8e-b910-e7321d5a7131",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-dien-quang-chan-doan-va-can-thiep/20464b02-8328-4a8e-b910-e7321d5a7131",
+    "Địa chỉ": "Tầng 1 - Nhà P, Bệnh viện Bạch Mai",
+    "Số điện thoại": ""
+  },
+  {
+    "STT": 16,
+    "Tên đơn vị": "Trung tâm Hỗ trợ sinh sản",
+    "Slug": "trung-tam-ho-tro-sinh-san",
+    "ID": "bc51fff6-02dd-4866-b368-bbbae0077417",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-ho-tro-sinh-san/bc51fff6-02dd-4866-b368-bbbae0077417",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 17,
+    "Tên đơn vị": "Phòng Hành chính quản trị",
+    "Slug": "phong-hanh-chinh-quan-tri",
+    "ID": "e53ed83e-c9ba-31b4-d001-58feaf776893",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/phong-hanh-chinh-quan-tri/e53ed83e-c9ba-31b4-d001-58feaf776893",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 18,
+    "Tên đơn vị": "Khoa Kiểm Soát Nhiễm Khuẩn",
+    "Slug": "khoa-kiem-soat-nhiem-khuan",
+    "ID": "10b35881-fcba-a642-a27c-0512a7a72d03",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-kiem-soat-nhiem-khuan/10b35881-fcba-a642-a27c-0512a7a72d03",
+    "Địa chỉ": null,
+    "Số điện thoại": ""
+  },
+  {
+    "STT": 19,
+    "Tên đơn vị": "Phòng Kế Hoạch Tổng Hợp",
+    "Slug": "phong-ke-hoach-tong-hop",
+    "ID": "bee65ee9-cca4-9d66-7811-4076b9023e17",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/phong-ke-hoach-tong-hop/bee65ee9-cca4-9d66-7811-4076b9023e17",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 20,
+    "Tên đơn vị": "Khoa Tai Mũi Họng",
+    "Slug": "khoa-tai-mui-hong",
+    "ID": "6bf5d66d-9c28-aa09-a4db-954b0cd4d754",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-tai-mui-hong/6bf5d66d-9c28-aa09-a4db-954b0cd4d754",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 21,
+    "Tên đơn vị": "Khoa Mắt",
+    "Slug": "khoa-mat",
+    "ID": "683c46cf-4126-e4cc-f359-f1eeac4e1354",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-mat/683c46cf-4126-e4cc-f359-f1eeac4e1354",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 22,
+    "Tên đơn vị": "Trung tâm Nội tiết và Chuyển hoá",
+    "Slug": "trung-tam-noi-tiet-va-chuyen-hoa",
+    "ID": "c070ef4b-cc24-5425-fced-85425b2be8d9",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-noi-tiet-va-chuyen-hoa/c070ef4b-cc24-5425-fced-85425b2be8d9",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 23,
+    "Tên đơn vị": "Khoa Phẫu Thuật Thần Kinh",
+    "Slug": "khoa-phau-thuat-than-kinh",
+    "ID": "c3fb17c3-9d36-79c5-dcbb-5aabd4519ad0",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-phau-thuat-than-kinh/c3fb17c3-9d36-79c5-dcbb-5aabd4519ad0",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 24,
+    "Tên đơn vị": "Khoa Phẫu thuật tiết niệu",
+    "Slug": "khoa-phau-thuat-tiet-nieu",
+    "ID": "85aba368-cebb-160b-b2f5-43e4203d0c6e",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-phau-thuat-tiet-nieu/85aba368-cebb-160b-b2f5-43e4203d0c6e",
+    "Địa chỉ": null,
+    "Số điện thoại": ""
+  },
+  {
+    "STT": 25,
+    "Tên đơn vị": "Trung tâm Phẫu thuật tiêu hoá",
+    "Slug": "trung-tam-phau-thuat-tieu-hoa",
+    "ID": "e4fab485-c167-c332-db53-1a3dd4596b52",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-phau-thuat-tieu-hoa/e4fab485-c167-c332-db53-1a3dd4596b52",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 26,
+    "Tên đơn vị": "Khoa Phẫu thuật Tạo hình Thẩm mỹ",
+    "Slug": "khoa-phau-thuat-tao-hinh-tham-my",
+    "ID": "f9c1fb0b-da7c-0dad-cfe9-1b09b28d514a",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-phau-thuat-tao-hinh-tham-my/f9c1fb0b-da7c-0dad-cfe9-1b09b28d514a",
+    "Địa chỉ": null,
+    "Số điện thoại": ""
+  },
+  {
+    "STT": 27,
+    "Tên đơn vị": "Khoa Phẫu thuật lồng ngực",
+    "Slug": "khoa-phau-thuat-long-nguc",
+    "ID": "57586f29-dbfc-47d9-b7d5-f096a4409987",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-phau-thuat-long-nguc/57586f29-dbfc-47d9-b7d5-f096a4409987",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 28,
+    "Tên đơn vị": "Khoa Phụ sản",
+    "Slug": "khoa-phu-san",
+    "ID": "45057599-cc62-3c38-6e2d-ec4dbd7a0414",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-phu-san/45057599-cc62-3c38-6e2d-ec4dbd7a0414",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 29,
+    "Tên đơn vị": "Phòng Quản lý Chất lượng và an toàn người bệnh",
+    "Slug": "phong-quan-ly-chat-luong-va-an-toan-nguoi-benh",
+    "ID": "f8d9e08b-85fb-a536-961a-bc1a3e29a339",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/phong-quan-ly-chat-luong-va-an-toan-nguoi-benh/f8d9e08b-85fb-a536-961a-bc1a3e29a339",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 30,
+    "Tên đơn vị": "Khoa Răng Hàm Mặt",
+    "Slug": "khoa-rang-ham-mat",
+    "ID": "bb3f3d60-1427-1959-4565-ddde89182b22",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-rang-ham-mat/bb3f3d60-1427-1959-4565-ddde89182b22",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 31,
+    "Tên đơn vị": "Viện Phục hồi chức năng Bạch Mai",
+    "Slug": "vien-phuc-hoi-chuc-nang-bach-mai",
+    "ID": "5069e93e-9a4d-bfa8-a19b-e17a68f17322",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-phuc-hoi-chuc-nang-bach-mai/5069e93e-9a4d-bfa8-a19b-e17a68f17322",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 32,
+    "Tên đơn vị": "Trung Tâm Hồi sức tích cực",
+    "Slug": "trung-tam-hoi-suc-tich-cuc",
+    "ID": "300dbb22-822a-0321-ed47-e27f256f9463",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-hoi-suc-tich-cuc/300dbb22-822a-0321-ed47-e27f256f9463",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 33,
+    "Tên đơn vị": "Viện Huyết Học và Truyền Máu Bạch Mai",
+    "Slug": "vien-huyet-hoc-va-truyen-mau-bach-mai",
+    "ID": "6ce98c9b-e10e-3007-f0ae-db77e1f43aeb",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-huyet-hoc-va-truyen-mau-bach-mai/6ce98c9b-e10e-3007-f0ae-db77e1f43aeb",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 34,
+    "Tên đơn vị": "Trung Tâm Nhi Khoa",
+    "Slug": "trung-tam-nhi-khoa",
+    "ID": "b6902812-11cd-068f-2502-b0613401ba26",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-nhi-khoa/b6902812-11cd-068f-2502-b0613401ba26",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 35,
+    "Tên đơn vị": "Trung Tâm GPB - TBH",
+    "Slug": "trung-tam-gpb-tbh",
+    "ID": "14b68c29-aae7-8bb9-02a8-c5fba3b5616b",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-gpb-tbh/14b68c29-aae7-8bb9-02a8-c5fba3b5616b",
+    "Địa chỉ": "Tầng 16 tào nhà Q.",
+    "Số điện thoại": ""
+  },
+  {
+    "STT": 36,
+    "Tên đơn vị": "Viện Tiêu hoá Bạch Mai",
+    "Slug": "vien-tieu-hoa-bach-mai",
+    "ID": "27038bcc-c8c6-3144-4bed-a13782649579",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-tieu-hoa-bach-mai/27038bcc-c8c6-3144-4bed-a13782649579",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 37,
+    "Tên đơn vị": "Khoa Dinh dưỡng lâm sàng",
+    "Slug": "khoa-dinh-duong-lam-sang",
+    "ID": "dbccfd45-238d-6a4d-9b48-e7760ea5c2eb",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-dinh-duong-lam-sang/dbccfd45-238d-6a4d-9b48-e7760ea5c2eb",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 38,
+    "Tên đơn vị": "Phòng Tổ chức cán bộ",
+    "Slug": "phong-to-chuc-can-bo",
+    "ID": "a44779ee-8e80-b082-f11b-ec3462f4b4ca",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/phong-to-chuc-can-bo/a44779ee-8e80-b082-f11b-ec3462f4b4ca",
+    "Địa chỉ": null,
+    "Số điện thoại": ""
+  },
+  {
+    "STT": 39,
+    "Tên đơn vị": "Trung Tâm Dị Ứng - MDLS",
+    "Slug": "trung-tam-di-ung-mdls",
+    "ID": "cb2c702d-0bbe-1167-dbe7-1cca25cb8b1e",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-di-ung-mdls/cb2c702d-0bbe-1167-dbe7-1cca25cb8b1e",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 40,
+    "Tên đơn vị": "Trung Tâm Gây Mê Hồi Sức",
+    "Slug": "trung-tam-gay-me-hoi-suc",
+    "ID": "45a6e362-9e12-5edc-2311-0d7abb36c293",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-gay-me-hoi-suc/45a6e362-9e12-5edc-2311-0d7abb36c293",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 41,
+    "Tên đơn vị": "Viện Cơ Xương Khớp Bạch Mai",
+    "Slug": "vien-co-xuong-khop-bach-mai",
+    "ID": "a5dadce5-d69f-c819-4042-620a8f5919ab",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-co-xuong-khop-bach-mai/a5dadce5-d69f-c819-4042-620a8f5919ab",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 42,
+    "Tên đơn vị": "Trung Tâm Cấp Cứu A9",
+    "Slug": "trung-tam-cap-cuu-a9",
+    "ID": "60a668af-6bd7-e930-1bf2-59765f13d55f",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-cap-cuu-a9/60a668af-6bd7-e930-1bf2-59765f13d55f",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 43,
+    "Tên đơn vị": "Trung Tâm Thận - Tiết niệu và lọc máu",
+    "Slug": "trung-tam-than-tiet-nieu-va-loc-mau",
+    "ID": "c485973e-0d4c-2007-a8e1-54f37677acd9",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-than-tiet-nieu-va-loc-mau/c485973e-0d4c-2007-a8e1-54f37677acd9",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 44,
+    "Tên đơn vị": "Trung Tâm Đột Quỵ",
+    "Slug": "trung-tam-dot-quy",
+    "ID": "6b36b7ce-cf58-0dcd-5241-8f744bf5d90c",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-dot-quy/6b36b7ce-cf58-0dcd-5241-8f744bf5d90c",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 45,
+    "Tên đơn vị": "Viện Hô Hấp Bạch Mai",
+    "Slug": "vien-ho-hap-bach-mai",
+    "ID": "fc47f023-830c-aea8-1e8e-66873704a2ff",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-ho-hap-bach-mai/fc47f023-830c-aea8-1e8e-66873704a2ff",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 46,
+    "Tên đơn vị": "Phòng Tài chính Kế toán",
+    "Slug": "phong-tai-chinh-ke-toan",
+    "ID": "a2c6b80d-86ea-fff7-34b9-6bb9c2d0962b",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/phong-tai-chinh-ke-toan/a2c6b80d-86ea-fff7-34b9-6bb9c2d0962b",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 47,
+    "Tên đơn vị": "Trung Tâm Chống Độc",
+    "Slug": "trung-tam-chong-doc",
+    "ID": "eaff97c4-121e-d4ef-3ba7-70a76002a867",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/trung-tam-chong-doc/eaff97c4-121e-d4ef-3ba7-70a76002a867",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 48,
+    "Tên đơn vị": "Viện Thần Kinh Bạch Mai",
+    "Slug": "vien-than-kinh-bach-mai",
+    "ID": "c95dd917-c4a4-261d-ec5e-4db1677dad22",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-than-kinh-bach-mai/c95dd917-c4a4-261d-ec5e-4db1677dad22",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 49,
+    "Tên đơn vị": "Văn Phòng bệnh viện",
+    "Slug": "van-phong-benh-vien",
+    "ID": "41cc59a3-007d-14ae-256c-5048dee864c9",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/van-phong-benh-vien/41cc59a3-007d-14ae-256c-5048dee864c9",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 50,
+    "Tên đơn vị": "Viện Sức Khoẻ Tâm Thần",
+    "Slug": "vien-suc-khoe-tam-than",
+    "ID": "b512eb57-1918-9f43-f356-1773ba4f6d1c",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-suc-khoe-tam-than/b512eb57-1918-9f43-f356-1773ba4f6d1c",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 51,
+    "Tên đơn vị": "Viện Tim Mạch",
+    "Slug": "vien-tim-mach",
+    "ID": "0b1cdd66-1c21-5a11-9229-942b8b809119",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-tim-mach/0b1cdd66-1c21-5a11-9229-942b8b809119",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 52,
+    "Tên đơn vị": "Khoa Vi Sinh",
+    "Slug": "khoa-vi-sinh",
+    "ID": "4d8eafb5-2628-6b13-fbf1-57e58f363d91",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-vi-sinh/4d8eafb5-2628-6b13-fbf1-57e58f363d91",
+    "Địa chỉ": "Tầng 2, 3 tòa nhà 3 tầng - Bệnh viện Bạch Mai",
+    "Số điện thoại": ""
+  },
+  {
+    "STT": 53,
+    "Tên đơn vị": "Phòng Vật tư thiết bị y tế",
+    "Slug": "phong-vat-tu-thiet-bi-y-te",
+    "ID": "8841df12-386b-c1ac-e491-eda5ae78cf1e",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/phong-vat-tu-thiet-bi-y-te/8841df12-386b-c1ac-e491-eda5ae78cf1e",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 54,
+    "Tên đơn vị": "Viện Giám Định Y Khoa",
+    "Slug": "vien-giam-dinh-y-khoa",
+    "ID": "cb65a989-0f71-dddb-a535-a1cb1dd193be",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/vien-giam-dinh-y-khoa/cb65a989-0f71-dddb-a535-a1cb1dd193be",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  },
+  {
+    "STT": 55,
+    "Tên đơn vị": "Khoa Y học cổ truyền",
+    "Slug": "khoa-y-hoc-co-truyen",
+    "ID": "aaa41f7c-a0b5-c849-dae6-cda0dcadd173",
+    "Link chi tiết": "https://bachmai.gov.vn/don-vi/khoa-y-hoc-co-truyen/aaa41f7c-a0b5-c849-dae6-cda0dcadd173",
+    "Địa chỉ": null,
+    "Số điện thoại": null
+  }
+]

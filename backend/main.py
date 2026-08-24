@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from urllib.request import Request
+from starlette.requests import Request
 
 from fastapi import FastAPI
 from starlette.responses import JSONResponse
@@ -12,6 +12,7 @@ from app.routers import (
     specialties_router,
     appointments_router,
     payments_router,
+    ai_router,
 )
 from app.exceptions import BaseException
 
@@ -39,3 +40,4 @@ app.include_router(doctors_router)
 app.include_router(specialties_router)
 app.include_router(appointments_router)
 app.include_router(payments_router)
+app.include_router(ai_router)

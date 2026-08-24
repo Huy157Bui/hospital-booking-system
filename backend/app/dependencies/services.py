@@ -30,6 +30,7 @@ from app.services import (
     ScheduleService,
     SpecialtyService,
     UserService,
+    AIService,
 )
 
 
@@ -162,3 +163,11 @@ async def get_report_service(
     return ReportService(payment_repo=payment_repo, report_repo=report_repo)
 
 ReportServiceDep = Annotated[ReportService, Depends(get_report_service)]
+
+async def get_ai_service(
+    doctor_repo: DoctorRepoDep,
+    specialty_repo: SpecialtyRepoDep,
+) -> AIService:
+    return AIService(doctor_repo=doctor_repo, specialty_repo=specialty_repo)
+
+AIServiceDep = Annotated[AIService, Depends(get_ai_service)]

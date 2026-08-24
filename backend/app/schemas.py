@@ -1,8 +1,8 @@
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Any
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models import (
     AppointmentStatus,
@@ -36,6 +36,7 @@ class UserCreate(UserBase):
             raise ValueError("Password must contain at least one digit")
         return v
 
+
 class UserUpdate(BaseModel):
     username: str | None = None
     email: EmailStr | None = None
@@ -60,8 +61,7 @@ class UserOut(BaseModel):
     created_date: datetime
     updated_date: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LoginRequest(BaseModel):
@@ -107,17 +107,19 @@ class PatientOut(PatientBase):
     updated_date: datetime | None = None
     user: UserOut | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class PatientsBySpecialtyItem(BaseModel):
     specialty_id: int
     specialty_name: str
     patient_count: int
 
+
 class PatientsBySpecialtyResponse(BaseModel):
     items: list[PatientsBySpecialtyItem]
     total_patients: int
+
 
 class DoctorBase(BaseModel):
     specialty_id: int
@@ -152,8 +154,7 @@ class DoctorOut(DoctorBase):
     user: UserOut | None = None
     specialty: Optional["SpecialtyOut"] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DoctorScheduleOut(BaseModel):
@@ -162,7 +163,7 @@ class DoctorScheduleOut(BaseModel):
 
 
 class SpecialtyBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=50)
+    name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
     location: str | None = None
     phone: str | None = None
@@ -190,8 +191,7 @@ class SpecialtyOut(SpecialtyBase):
     created_date: datetime
     updated_date: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ScheduleSlotBase(BaseModel):
@@ -218,10 +218,8 @@ class ScheduleSlotOut(ScheduleSlotBase):
     start_time: time
     end_time: time
     schedule_id: int
-    # appointment: Optional["AppointmentOut"] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ScheduleBase(BaseModel):
@@ -247,8 +245,7 @@ class ScheduleOut(ScheduleBase):
     doctor: Optional["DoctorOut"] = None
     slots: list["ScheduleSlotOut"] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AppointmentBase(BaseModel):
@@ -286,17 +283,19 @@ class AppointmentOut(AppointmentBase):
     patient: Optional["PatientOut"] = None
     slot: Optional["ScheduleSlotOut"] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class AppointmentStatusCount(BaseModel):
     status: str
     count: int
 
+
 class DailyAppointmentSummary(BaseModel):
     date: date
     total: int
     by_status: dict[str, int]
+
 
 class AppointmentsSummaryResponse(BaseModel):
     total_appointments: int
@@ -304,6 +303,7 @@ class AppointmentsSummaryResponse(BaseModel):
     daily_summary: list[DailyAppointmentSummary]
     start_date: date | None
     end_date: date | None
+
 
 class MedicalRecordBase(BaseModel):
     patient_id: int
@@ -330,8 +330,7 @@ class MedicalRecordOut(MedicalRecordBase):
     updated_date: datetime | None = None
     patient: PatientOut | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ExaminationBase(BaseModel):
@@ -385,8 +384,7 @@ class ExaminationOut(ExaminationBase):
     patient: PatientOut | None = None
     doctor: DoctorOut | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PrescriptionBase(BaseModel):
@@ -415,8 +413,7 @@ class PrescriptionOut(PrescriptionBase):
     examination: ExaminationOut | None = None
     prescription_details: list["PrescriptionDetailOut"] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PrescriptionDetailBase(BaseModel):
@@ -457,8 +454,7 @@ class PrescriptionDetailOut(PrescriptionDetailBase):
     subtotal: Decimal
     medicine: Optional["MedicineOut"] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MedicineBase(BaseModel):
@@ -494,8 +490,8 @@ class MedicineOut(MedicineBase):
     created_date: datetime
     updated_date: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class PrescriptionItemCreate(BaseModel):
     medicine_id: int
@@ -527,19 +523,23 @@ class ExaminationRecordCreate(BaseModel):
     examined_at: datetime | None = None
     prescriptions: list[PrescriptionCreateWithoutExam] | None = None
 
+
 class PatientMedicalHistoryOut(BaseModel):
     medical_record: MedicalRecordOut | None = None
     examinations: list[ExaminationOut] = Field(default_factory=list)
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class PaymentBase(BaseModel):
     appointment_id: int
     amount: Decimal = Field(..., max_digits=10, decimal_places=2)
     payment_method: str | None = None
 
+
 class PaymentCreate(PaymentBase):
     pass
+
 
 class PaymentOut(PaymentBase):
     id: int
@@ -548,13 +548,14 @@ class PaymentOut(PaymentBase):
     created_date: datetime
     updated_date: datetime | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class RevenueFilter(BaseModel):
     start_date: datetime = Field(..., description="Thời gian bắt đầu (ISO format)")
     end_date: datetime = Field(..., description="Thời gian kết thúc (ISO format)")
     doctor_id: int | None = Field(None, description="ID bác sĩ (nếu có)")
+
 
 class RevenueItem(BaseModel):
     payment_id: int
@@ -567,22 +568,36 @@ class RevenueItem(BaseModel):
     patient_name: str | None
     appointment_id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class RevenueResponse(BaseModel):
     total_revenue: Decimal = Field(..., description="Tổng doanh thu")
     total_transactions: int = Field(..., description="Số giao dịch thành công")
     items: list[RevenueItem] = Field(..., description="Chi tiết các giao dịch")
 
+
+class ChatRequest(BaseModel):
+    message: str = Field(
+        ...,
+        min_length=1,
+        examples=["Tôi bị đau ngực mất ngủ thì nên khám bác sĩ nào ở Bạch Mai?"],
+    )
+    chat_history: Optional[list[Any]] = Field(
+        default=None,
+        description="Lịch sử hội thoại (danh sách các tin nhắn)"
+    )
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    status: str = "success"
+
+
 DoctorOut.model_rebuild()
-
 DoctorScheduleOut.model_rebuild()
-
 ScheduleOut.model_rebuild()
 AppointmentOut.model_rebuild()
-
 ExaminationOut.model_rebuild()
-
 PrescriptionDetailOut.model_rebuild()
 PrescriptionOut.model_rebuild()

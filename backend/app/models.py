@@ -1,6 +1,7 @@
 import enum
 
 from sqlalchemy import (
+    Text,
     Boolean,
     Column,
     Date,
@@ -117,7 +118,7 @@ class Doctor(Base):
     experience_year = Column(Integer, nullable=True)
     rate = Column(Float, nullable=True, default=0)
     consultation_fee = Column(Numeric(10, 2), nullable=False, default=0)
-    biography = Column(String(500), nullable=True)
+    biography = Column(Text, nullable=True)
     license_number = Column(String(50), nullable=False, unique=True)
     status = Column(String(50), nullable=False, default="active")
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
@@ -135,8 +136,8 @@ class Specialty(Base):
     __tablename__ = "specialties"
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(50), nullable=False, unique=True)
-    description = Column(String(500), nullable=True)
+    name = Column(String(255), nullable=False, unique=True)
+    description = Column(Text, nullable=True)
     location = Column(String(500), nullable=True)
     phone = Column(String(50), nullable=True)
     email = Column(String(50), nullable=True)

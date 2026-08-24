@@ -187,6 +187,54 @@ class DoctorRepository(BaseRepository[Doctor]):
         result = await self.db.execute(stmt)
         return result.scalar_one()
 
+    async def search_doctors_for_ai(
+        self, specialty_name: str | None = None, max_fee: float | None = None
+    ) -> list[Doctor]:
+        stmt = (
+            select(Doctor)
+            .join(Specialty)
+            .options(
+                selectinload(Doctor.specialty),
+                selectinload(
+                    Doctor.user
+                ),
+            )
+        )
+
+        if specialty_name:
+            stmt = stmt.where(Specialty.name.ilike(f"%{specialty_name}%"))
+
+        if max_fee and max_fee > 0:
+            stmt = stmt.where(Doctor.consultation_fee <= max_fee)
+
+        stmt = stmt.limit(5)
+
+        result = await self.db.execute(stmt)
+        doctors = result.scalars().all()
+
+        if not doctors and specialty_name:
+            stmt_fb1 = (
+                select(Doctor)
+                .join(Specialty)
+                .options(selectinload(Doctor.specialty), selectinload(Doctor.user))
+                .where(Specialty.name.ilike(f"%{specialty_name}%"))
+                .limit(5)
+            )
+            res_fb1 = await self.db.execute(stmt_fb1)
+            doctors = res_fb1.scalars().all()
+
+        if not doctors:
+            stmt_fb2 = (
+                select(Doctor)
+                .options(selectinload(Doctor.specialty), selectinload(Doctor.user))
+                .order_by(Doctor.consultation_fee.asc())
+                .limit(5)
+            )
+            res_fb2 = await self.db.execute(stmt_fb2)
+            doctors = res_fb2.scalars().all()
+
+        return doctors
+
 
 class SpecialtyRepository(BaseRepository[Specialty]):
     def __init__(self, db: AsyncSession) -> None:
