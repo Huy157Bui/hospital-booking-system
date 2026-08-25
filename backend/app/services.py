@@ -4,9 +4,9 @@ from decimal import Decimal
 from pathlib import Path
 import re
 from typing import Any, Optional
+import unicodedata
 
 import chromadb
-import unicodedata
 from chromadb.utils import embedding_functions
 from jose import JWTError, jwt
 from langchain.prompts import PromptTemplate
@@ -68,7 +68,7 @@ PROJECT_ROOT = CURRENT_FILE.parent.parent.parent
 CHROMA_DB_DIR = PROJECT_ROOT / "database" / "chroma_db"
 
 if not CHROMA_DB_DIR.exists():
-  CHROMA_DB_DIR = CURRENT_FILE.parent.parent / "database" / "chroma_db"
+    CHROMA_DB_DIR = CURRENT_FILE.parent.parent / "database" / "chroma_db"
 
 COLLECTION_NAME = "bachmai_knowledge"
 
@@ -76,720 +76,722 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
-  return pwd_context.hash(password)
+    return pwd_context.hash(password)
 
 
 def verify_password(plain, hashed) -> bool:
-  return pwd_context.verify(plain, hashed)
+    return pwd_context.verify(plain, hashed)
 
 
 def create_access_token(
     data: dict, expires_delta: timedelta | None = None
 ) -> str:
-  to_encode = data.copy()
-  expire = datetime.now(UTC) + (
-      expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-  )
-  to_encode.update({"exp": expire})
-  return jwt.encode(
-      to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
-  )
+    to_encode = data.copy()
+    expire = datetime.now(UTC) + (
+        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    to_encode.update({"exp": expire})
+    return jwt.encode(
+        to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
+    )
 
 
 class AuthService:
+    def __init__(self, user_repo: UserRepoDep):
+        self.user_repo = user_repo
 
-  def __init__(self, user_repo: UserRepoDep):
-    self.user_repo = user_repo
+    def decode_token(self, token: str) -> int:
+        try:
+            payload = jwt.decode(
+                token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+            )
+        except JWTError:
+            raise InvalidTokenError()
+        user_id = payload.get("id")
+        if user_id is None:
+            raise InvalidTokenError()
+        return user_id
 
-  def decode_token(self, token: str) -> int:
-    try:
-      payload = jwt.decode(
-          token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-      )
-    except JWTError:
-      raise InvalidTokenError()
-    user_id = payload.get("id")
-    if user_id is None:
-      raise InvalidTokenError()
-    return user_id
+    async def get_current_user(self, token: str) -> User:
+        user_id = self.decode_token(token)
+        user = await self.user_repo.get_by_id(user_id)
+        if user is None:
+            raise InvalidTokenError()
+        return user
 
-  async def get_current_user(self, token: str) -> User:
-    user_id = self.decode_token(token)
-    user = await self.user_repo.get_by_id(user_id)
-    if user is None:
-      raise InvalidTokenError()
-    return user
+    async def register(self, user_data: UserCreate) -> User:
+        if await self.user_repo.get_by_username(user_data.username):
+            raise BadRequestException("Tên đăng nhập đã tồn tại")
+        if await self.user_repo.get_by_email(user_data.email):
+            raise BadRequestException("Email đã tồn tại")
 
-  async def register(self, user_data: UserCreate) -> User:
-    if await self.user_repo.get_by_username(user_data.username):
-      raise BadRequestException("Tên đăng nhập đã tồn tại")
-    if await self.user_repo.get_by_email(user_data.email):
-      raise BadRequestException("Email đã tồn tại")
+        hashed_password = hash_password(user_data.password)
+        user = User(
+            username=user_data.username,
+            email=user_data.email,
+            full_name=user_data.full_name,
+            phone=user_data.phone,
+            avatar=user_data.avatar,
+            role=user_data.role or UserRole.PATIENT,
+            is_active=True,
+            password=hashed_password,
+        )
+        return await self.user_repo.create(user)
 
-    hashed_password = hash_password(user_data.password)
-    user = User(
-        username=user_data.username,
-        email=user_data.email,
-        full_name=user_data.full_name,
-        phone=user_data.phone,
-        avatar=user_data.avatar,
-        role=user_data.role or UserRole.PATIENT,
-        is_active=True,
-        password=hashed_password,
-    )
-    return await self.user_repo.create(user)
+    async def authenticate(self, username: str, password: str) -> User | None:
+        user = await self.user_repo.get_by_username(username)
+        if not user or not verify_password(password, user.password):
+            return None
+        return user
 
-  async def authenticate(self, username: str, password: str) -> User | None:
-    user = await self.user_repo.get_by_username(username)
-    if not user or not verify_password(password, user.password):
-      return None
-    return user
+    async def login(self, username: str, password: str) -> dict | None:
+        user = await self.authenticate(username, password)
+        if not user:
+            raise BadRequestException("Sai tên đăng nhập hoặc mật khẩu")
+        if not user.is_active:
+            raise ForbiddenException("Tài khoản bị vô hiệu hóa")
 
-  async def login(self, username: str, password: str) -> dict | None:
-    user = await self.authenticate(username, password)
-    if not user:
-      raise BadRequestException("Sai tên đăng nhập hoặc mật khẩu")
-    if not user.is_active:
-      raise ForbiddenException("Tài khoản bị vô hiệu hóa")
+        user.last_login = datetime.now(UTC)
+        await self.user_repo.update(user)
 
-    user.last_login = datetime.now(UTC)
-    await self.user_repo.update(user)
+        access_token = create_access_token(
+            data={"sub": user.username, "id": user.id, "role": user.role.value}
+        )
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": user,
+        }
 
-    access_token = create_access_token(
-        data={"sub": user.username, "id": user.id, "role": user.role.value}
-    )
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": user,
-    }
+    async def get_user_by_username(self, username: str) -> User | None:
+        user = await self.user_repo.get_by_username(username)
+        if user is None or not user.is_active:
+            return None
+        return user
 
-  async def get_user_by_username(self, username: str) -> User | None:
-    user = await self.user_repo.get_by_username(username)
-    if user is None or not user.is_active:
-      return None
-    return user
-
-  async def get_user_by_id(self, user_id: int) -> User | None:
-    user = await self.user_repo.get_by_id(user_id)
-    if user is None or not user.is_active:
-      return None
-    return user
+    async def get_user_by_id(self, user_id: int) -> User | None:
+        user = await self.user_repo.get_by_id(user_id)
+        if user is None or not user.is_active:
+            return None
+        return user
 
 
 class UserService:
+    def __init__(self, user_repo: UserRepoDep):
+        self.user_repo = user_repo
 
-  def __init__(self, user_repo: UserRepoDep):
-    self.user_repo = user_repo
-
-  def get_profile(self, current_user: User):
-    return current_user
+    def get_profile(self, current_user: User):
+        return current_user
 
 
 class AppointmentService:
-
-  def __init__(
-      self,
-      appointment_repo: AppointmentRepoDep,
-      slot_repo: ScheduleSlotRepoDep,
-      doctor_repo: DoctorRepoDep,
-      patient_repo: PatientRepoDep,
-      medical_record_repo: MedicalRecordRepoDep,
-      examination_repo: ExaminationRepoDep,
-      prescription_repo: PrescriptionRepoDep,
-      prescription_detail_repo: PrescriptionDetailRepoDep,
-      medicine_repo: MedicineRepoDep,
-      payment_repo: PaymentRepoDep,
-  ):
-    self.appointment_repo = appointment_repo
-    self.slot_repo = slot_repo
-    self.doctor_repo = doctor_repo
-    self.patient_repo = patient_repo
-    self.medical_record_repo = medical_record_repo
-    self.examination_repo = examination_repo
-    self.prescription_repo = prescription_repo
-    self.prescription_detail_repo = prescription_detail_repo
-    self.medicine_repo = medicine_repo
-    self.payment_repo = payment_repo
-
-  async def get_accessible_appointment(
-      self, appointment_id: int, current_user: User
-  ) -> Appointment:
-    appointment = await self.appointment_repo.get_by_id_with_relations(
-        appointment_id
-    )
-    if not appointment:
-      raise ResourceNotFound("Không tìm thấy lịch hẹn")
-
-    if current_user.role == UserRole.ADMIN:
-      return appointment
-
-    if current_user.role == UserRole.PATIENT:
-      patient = await self.patient_repo.get_by_user_id(current_user.id)
-      if not patient or patient.id != appointment.patient_id:
-        raise ForbiddenException("Bạn không phải bệnh nhân của lịch hẹn này")
-      return appointment
-
-    if current_user.role == UserRole.DOCTOR:
-      doctor = await self.doctor_repo.get_by_user_id(current_user.id)
-      if not doctor or doctor.id != appointment.slot.schedule.doctor_id:
-        raise ForbiddenException("Bạn không phải bác sĩ được phân công")
-      return appointment
-
-    raise ForbiddenException(
-        "Chỉ bệnh nhân, bác sĩ hoặc quản trị viên mới được xem lịch hẹn này"
-    )
-
-  async def get_user_appointments(
-      self, current_user: User
-  ) -> list[Appointment]:
-    if current_user.role == UserRole.PATIENT:
-      return await self.appointment_repo.get_by_patient(current_user.id)
-    return await self.appointment_repo.get_by_doctor(current_user.id)
-
-  async def create_appointment(
-      self,
-      patient: Patient,
-      appointment_data: AppointmentCreate,
-  ) -> Appointment:
-    slot = await self.slot_repo.get_by_id(appointment_data.slot_id)
-    if slot is None:
-      raise ResourceNotFound("Không tìm thấy khung giờ")
-
-    if slot.status != ScheduleSlotStatus.AVAILABLE:
-      raise BadRequestException("Khung giờ không khả dụng")
-
-    existing = await self.appointment_repo.get_by_slot_id(
-        appointment_data.slot_id
-    )
-    if existing is not None:
-      raise ConflictException("Khung giờ đã được đặt")
-
-    appointment = Appointment(
-        patient_id=patient.id,
-        slot_id=slot.id,
-        status=AppointmentStatus.PENDING,
-    )
-    appointment = await self.appointment_repo.create_with_slot(appointment)
-
-    slot.status = ScheduleSlotStatus.BOOKED
-    await self.slot_repo.update(slot)
-
-    return appointment
-
-  async def cancel_appointment(
-      self,
-      appointment_id: int,
-      current_user: User,
-      cancel_data: AppointmentCancel,
-  ):
-    appointment = await self.appointment_repo.get_by_id_with_slot(
-        appointment_id
-    )
-    if not appointment:
-      raise ResourceNotFound("Không tìm thấy lịch hẹn")
-
-    if current_user.role != UserRole.ADMIN:
-      if current_user.role != UserRole.PATIENT:
-        raise ForbiddenException("Từ chối truy cập")
-      patient = await self.patient_repo.get_by_user_id(current_user.id)
-      if not patient or appointment.patient_id != patient.id:
-        raise ForbiddenException("Từ chối truy cập")
-
-    if appointment.status == AppointmentStatus.CANCELLED:
-      raise ForbiddenException("Từ chối truy cập")
-    if appointment.status == AppointmentStatus.COMPLETED:
-      raise BadRequestException("Không thể hủy lịch hẹn đã hoàn thành")
-
-    return await self.appointment_repo.cancel(
-        appointment, cancel_data.cancel_reason
-    )
-
-  async def update_appointment_status(
-      self,
-      appointment_id: int,
-      new_status: AppointmentStatus,
-      doctor: Doctor,
-  ) -> Appointment:
-    appointment = await self.appointment_repo.get_by_id_with_slot(
-        appointment_id
-    )
-    if not appointment:
-      raise ResourceNotFound("Không tìm thấy lịch hẹn")
-
-    if appointment.slot.schedule.doctor_id != doctor.id:
-      raise ForbiddenException(
-          "Bạn không phải bác sĩ được phân công cho lịch hẹn này"
-      )
-
-    current_status = appointment.status
-    if current_status in (
-        AppointmentStatus.CANCELLED,
-        AppointmentStatus.COMPLETED,
-        AppointmentStatus.PAID,
+    def __init__(
+        self,
+        appointment_repo: AppointmentRepoDep,
+        slot_repo: ScheduleSlotRepoDep,
+        doctor_repo: DoctorRepoDep,
+        patient_repo: PatientRepoDep,
+        medical_record_repo: MedicalRecordRepoDep,
+        examination_repo: ExaminationRepoDep,
+        prescription_repo: PrescriptionRepoDep,
+        prescription_detail_repo: PrescriptionDetailRepoDep,
+        medicine_repo: MedicineRepoDep,
+        payment_repo: PaymentRepoDep,
     ):
-      raise BadRequestException("Không thể thay đổi trạng thái")
+        self.appointment_repo = appointment_repo
+        self.slot_repo = slot_repo
+        self.doctor_repo = doctor_repo
+        self.patient_repo = patient_repo
+        self.medical_record_repo = medical_record_repo
+        self.examination_repo = examination_repo
+        self.prescription_repo = prescription_repo
+        self.prescription_detail_repo = prescription_detail_repo
+        self.medicine_repo = medicine_repo
+        self.payment_repo = payment_repo
 
-    valid_transitions = {
-        AppointmentStatus.PENDING: [
-            AppointmentStatus.CHECKING_IN,
-            AppointmentStatus.EXAMINING,
-        ],
-        AppointmentStatus.CONFIRMED: [
-            AppointmentStatus.CHECKING_IN,
-            AppointmentStatus.EXAMINING,
-        ],
-        AppointmentStatus.CHECKING_IN: [
-            AppointmentStatus.EXAMINING,
-            AppointmentStatus.COMPLETED,
-        ],
-        AppointmentStatus.EXAMINING: [AppointmentStatus.COMPLETED],
-    }
-    allowed = valid_transitions.get(current_status, [])
-    if new_status not in allowed:
-      raise BadRequestException("Chuyển trạng thái không hợp lệ")
+    async def get_accessible_appointment(
+        self, appointment_id: int, current_user: User
+    ) -> Appointment:
+        appointment = await self.appointment_repo.get_by_id_with_relations(
+            appointment_id
+        )
+        if not appointment:
+            raise ResourceNotFound("Không tìm thấy lịch hẹn")
 
-    await self.appointment_repo.update_status(appointment, new_status)
-    updated = await self.appointment_repo.get_by_id_with_relations(
-        appointment_id
-    )
-    if not updated:
-      raise ResourceNotFound("Không tìm thấy lịch hẹn sau khi cập nhật")
-    return updated
+        if current_user.role == UserRole.ADMIN:
+            return appointment
 
-  async def get_available_slots(
-      self, doctor_id: int, date: date
-  ) -> list[ScheduleSlot]:
-    return await self.slot_repo.get_available_slots_by_doctor_and_date(
-        doctor_id, date
-    )
+        if current_user.role == UserRole.PATIENT:
+            patient = await self.patient_repo.get_by_user_id(current_user.id)
+            if not patient or patient.id != appointment.patient_id:
+                raise ForbiddenException("Bạn không phải bệnh nhân của lịch hẹn này")
+            return appointment
 
-  async def add_examination_record(
-      self,
-      appointment_id: int,
-      doctor: Doctor,
-      data: ExaminationRecordCreate,
-  ) -> Examination:
-    appointment = await self.appointment_repo.get_by_id_with_slot(
-        appointment_id
-    )
-    if not appointment:
-      raise ResourceNotFound("Không tìm thấy lịch hẹn")
-    if appointment.slot.schedule.doctor_id != doctor.id:
-      raise ForbiddenException("Bạn không phải bác sĩ được phân công")
-    if appointment.status not in (
-        AppointmentStatus.EXAMINING,
-        AppointmentStatus.COMPLETED,
-    ):
-      raise BadRequestException("Không thể thêm hồ sơ cho trạng thái này")
+        if current_user.role == UserRole.DOCTOR:
+            doctor = await self.doctor_repo.get_by_user_id(current_user.id)
+            if not doctor or doctor.id != appointment.slot.schedule.doctor_id:
+                raise ForbiddenException("Bạn không phải bác sĩ được phân công")
+            return appointment
 
-    patient = appointment.patient
-    if not patient:
-      raise ResourceNotFound("Không tìm thấy bệnh nhân")
-
-    medical_record = await self.medical_record_repo.get_by_patient_id(
-        patient.id
-    )
-    if not medical_record:
-      medical_record = await self.medical_record_repo.create(
-          MedicalRecord(
-              patient_id=patient.id, record_number=generate_record_number()
-          )
-      )
-
-    status = (
-        "completed"
-        if appointment.status == AppointmentStatus.COMPLETED
-        else "in_progress"
-    )
-
-    examination = await self.examination_repo.get_by_appointment(appointment_id)
-    if not examination:
-      examination = await self.examination_repo.create(
-          Examination(
-              appointment_id=appointment_id,
-              medical_record_id=medical_record.id,
-              patient_id=patient.id,
-              doctor_id=doctor.id,
-              symptom=data.symptom,
-              diagnosis=data.diagnosis,
-              conclusion=data.conclusion,
-              disease_name=data.disease_name,
-              height=data.height,
-              weight=data.weight,
-              blood_pressure=data.blood_pressure,
-              heart_rate=data.heart_rate,
-              temperature=data.temperature,
-              note=data.note,
-              examined_at=data.examined_at or datetime.now(UTC),
-              status=status,
-          )
-      )
-    else:
-      examination.symptom = data.symptom
-      examination.diagnosis = data.diagnosis
-      examination.conclusion = data.conclusion
-      examination.disease_name = data.disease_name
-      examination.height = data.height
-      examination.weight = data.weight
-      examination.blood_pressure = data.blood_pressure
-      examination.heart_rate = data.heart_rate
-      examination.temperature = data.temperature
-      examination.note = data.note
-      examination.examined_at = data.examined_at or datetime.now(UTC)
-      if appointment.status == AppointmentStatus.COMPLETED:
-        examination.status = "completed"
-      examination = await self.examination_repo.update(examination)
-
-    if data.prescriptions:
-      existing_prescriptions = (
-          await self.prescription_repo.get_by_examination(examination.id)
-      )
-      await self.prescription_repo.delete_many(existing_prescriptions)
-
-      for pres_data in data.prescriptions:
-        prescription = await self.prescription_repo.create(
-            Prescription(
-                examination_id=examination.id,
-                prescription_type=pres_data.prescription_type,
-                note=pres_data.note,
-                total_amount=DECIMAL(0),
-                status=0,
-            )
+        raise ForbiddenException(
+            "Chỉ bệnh nhân, bác sĩ hoặc quản trị viên mới được xem lịch hẹn này"
         )
 
-        total = DECIMAL(0)
-        details = []
-        for item in pres_data.items:
-          medicine = await self.medicine_repo.get_by_id(item.medicine_id)
-          if not medicine:
-            raise ResourceNotFound("Không tìm thấy thuốc")
-          unit_price = medicine.current_price
-          subtotal = unit_price * item.quantity
-          total += subtotal
-          details.append(
-              PrescriptionDetail(
-                  prescription_id=prescription.id,
-                  medicine_id=item.medicine_id,
-                  quantity=item.quantity,
-                  unit_price=unit_price,
-                  dosage=item.dosage,
-                  frequency=item.frequency,
-                  duration=item.duration,
-                  days=item.days,
-                  instruction=item.instruction,
-                  subtotal=subtotal,
-              )
-          )
+    async def get_user_appointments(
+        self, current_user: User
+    ) -> list[Appointment]:
+        if current_user.role == UserRole.PATIENT:
+            return await self.appointment_repo.get_by_patient(current_user.id)
+        return await self.appointment_repo.get_by_doctor(current_user.id)
 
-        await self.prescription_detail_repo.bulk_create(details)
-        prescription.total_amount = total
-        await self.prescription_repo.update(prescription)
+    async def create_appointment(
+        self,
+        patient: Patient,
+        appointment_data: AppointmentCreate,
+    ) -> Appointment:
+        slot = await self.slot_repo.get_by_id(appointment_data.slot_id)
+        if slot is None:
+            raise ResourceNotFound("Không tìm thấy khung giờ")
 
-    await self.examination_repo.refresh(examination)
-    return examination
+        if slot.status != ScheduleSlotStatus.AVAILABLE:
+            raise BadRequestException("Khung giờ không khả dụng")
 
-  async def get_appointment_record(
-      self, appointment: Appointment
-  ) -> Examination:
-    examination = await self.examination_repo.get_by_appointment(appointment.id)
-    if not examination:
-      raise ResourceNotFound("Không tìm thấy hồ sơ khám cho lịch hẹn này")
-    return examination
+        existing = await self.appointment_repo.get_by_slot_id(
+            appointment_data.slot_id
+        )
+        if existing is not None:
+            raise ConflictException("Khung giờ đã được đặt")
 
-  async def create_payment(
-      self,
-      appointment_id: int,
-      current_user: User,
-      payment_method: str | None = None,
-  ) -> Payment:
-    appointment = await self.appointment_repo.get_by_id_with_relations(
-        appointment_id
-    )
-    if not appointment:
-      raise ResourceNotFound("Không tìm thấy lịch hẹn")
+        appointment = Appointment(
+            patient_id=patient.id,
+            slot_id=slot.id,
+            status=AppointmentStatus.PENDING,
+        )
+        appointment = await self.appointment_repo.create_with_slot(appointment)
 
-    if current_user.role != UserRole.PATIENT:
-      raise ForbiddenException("Chỉ bệnh nhân mới có thể tạo thanh toán")
-    patient = await self.patient_repo.get_by_user_id(current_user.id)
-    if not patient or patient.id != appointment.patient_id:
-      raise ForbiddenException("Bạn không phải chủ sở hữu của lịch hẹn này")
+        slot.status = ScheduleSlotStatus.BOOKED
+        await self.slot_repo.update(slot)
 
-    if appointment.status not in (
-        AppointmentStatus.COMPLETED,
-        AppointmentStatus.PENDING,
+        return appointment
+
+    async def cancel_appointment(
+        self,
+        appointment_id: int,
+        current_user: User,
+        cancel_data: AppointmentCancel,
     ):
-      raise BadRequestException(
-          "Chỉ có thể tạo thanh toán cho lịch hẹn đã hoàn thành hoặc đang chờ"
-          " xác nhận"
-      )
+        appointment = await self.appointment_repo.get_by_id_with_slot(
+            appointment_id
+        )
+        if not appointment:
+            raise ResourceNotFound("Không tìm thấy lịch hẹn")
 
-    existing_payment = await self.payment_repo.get_by_appointment(
-        appointment_id
-    )
-    if existing_payment:
-      raise ConflictException("Lịch hẹn này đã có thanh toán")
+        if current_user.role != UserRole.ADMIN:
+            if current_user.role != UserRole.PATIENT:
+                raise ForbiddenException("Từ chối truy cập")
+            patient = await self.patient_repo.get_by_user_id(current_user.id)
+            if not patient or appointment.patient_id != patient.id:
+                raise ForbiddenException("Từ chối truy cập")
 
-    doctor = appointment.slot.schedule.doctor
-    if not doctor:
-      raise ResourceNotFound("Không tìm thấy bác sĩ của lịch hẹn này")
-    amount = doctor.consultation_fee
+        if appointment.status == AppointmentStatus.CANCELLED:
+            raise ForbiddenException("Từ chối truy cập")
+        if appointment.status == AppointmentStatus.COMPLETED:
+            raise BadRequestException("Không thể hủy lịch hẹn đã hoàn thành")
 
-    payment = Payment(
-        appointment_id=appointment_id,
-        amount=amount,
-        status=PaymentStatus.PENDING,
-        payment_method=payment_method,
-        transaction_id=None,
-    )
-    await self.payment_repo.create(payment)
-    await self.payment_repo.refresh(payment)
+        return await self.appointment_repo.cancel(
+            appointment, cancel_data.cancel_reason
+        )
 
-    appointment.status = AppointmentStatus.PAID
-    await self.appointment_repo.update(appointment)
+    async def update_appointment_status(
+        self,
+        appointment_id: int,
+        new_status: AppointmentStatus,
+        doctor: Doctor,
+    ) -> Appointment:
+        appointment = await self.appointment_repo.get_by_id_with_slot(
+            appointment_id
+        )
+        if not appointment:
+            raise ResourceNotFound("Không tìm thấy lịch hẹn")
 
-    return payment
+        if appointment.slot.schedule.doctor_id != doctor.id:
+            raise ForbiddenException(
+                "Bạn không phải bác sĩ được phân công cho lịch hẹn này"
+            )
+
+        current_status = appointment.status
+        if current_status in (
+            AppointmentStatus.CANCELLED,
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.PAID,
+        ):
+            raise BadRequestException("Không thể thay đổi trạng thái")
+
+        valid_transitions = {
+            AppointmentStatus.PENDING: [
+                AppointmentStatus.CHECKING_IN,
+                AppointmentStatus.EXAMINING,
+            ],
+            AppointmentStatus.CONFIRMED: [
+                AppointmentStatus.CHECKING_IN,
+                AppointmentStatus.EXAMINING,
+            ],
+            AppointmentStatus.CHECKING_IN: [
+                AppointmentStatus.EXAMINING,
+                AppointmentStatus.COMPLETED,
+            ],
+            AppointmentStatus.EXAMINING: [AppointmentStatus.COMPLETED],
+        }
+        allowed = valid_transitions.get(current_status, [])
+        if new_status not in allowed:
+            raise BadRequestException("Chuyển trạng thái không hợp lệ")
+
+        await self.appointment_repo.update_status(appointment, new_status)
+        updated = await self.appointment_repo.get_by_id_with_relations(
+            appointment_id
+        )
+        if not updated:
+            raise ResourceNotFound("Không tìm thấy lịch hẹn sau khi cập nhật")
+        return updated
+
+    async def get_available_slots(
+        self, doctor_id: int, date: date
+    ) -> list[ScheduleSlot]:
+        return await self.slot_repo.get_available_slots_by_doctor_and_date(
+            doctor_id, date
+        )
+
+    async def add_examination_record(
+        self,
+        appointment_id: int,
+        doctor: Doctor,
+        data: ExaminationRecordCreate,
+    ) -> Examination:
+        appointment = await self.appointment_repo.get_by_id_with_slot(
+            appointment_id
+        )
+        if not appointment:
+            raise ResourceNotFound("Không tìm thấy lịch hẹn")
+        if appointment.slot.schedule.doctor_id != doctor.id:
+            raise ForbiddenException("Bạn không phải bác sĩ được phân công")
+        if appointment.status not in (
+            AppointmentStatus.EXAMINING,
+            AppointmentStatus.COMPLETED,
+        ):
+            raise BadRequestException("Không thể thêm hồ sơ cho trạng thái này")
+
+        patient = appointment.patient
+        if not patient:
+            raise ResourceNotFound("Không tìm thấy bệnh nhân")
+
+        medical_record = await self.medical_record_repo.get_by_patient_id(
+            patient.id
+        )
+        if not medical_record:
+            medical_record = await self.medical_record_repo.create(
+                MedicalRecord(
+                    patient_id=patient.id, record_number=generate_record_number()
+                )
+            )
+
+        status = (
+            "completed"
+            if appointment.status == AppointmentStatus.COMPLETED
+            else "in_progress"
+        )
+
+        examination = await self.examination_repo.get_by_appointment(appointment_id)
+        if not examination:
+            examination = await self.examination_repo.create(
+                Examination(
+                    appointment_id=appointment_id,
+                    medical_record_id=medical_record.id,
+                    patient_id=patient.id,
+                    doctor_id=doctor.id,
+                    symptom=data.symptom,
+                    diagnosis=data.diagnosis,
+                    conclusion=data.conclusion,
+                    disease_name=data.disease_name,
+                    height=data.height,
+                    weight=data.weight,
+                    blood_pressure=data.blood_pressure,
+                    heart_rate=data.heart_rate,
+                    temperature=data.temperature,
+                    note=data.note,
+                    examined_at=data.examined_at or datetime.now(UTC),
+                    status=status,
+                )
+            )
+        else:
+            examination.symptom = data.symptom
+            examination.diagnosis = data.diagnosis
+            examination.conclusion = data.conclusion
+            examination.disease_name = data.disease_name
+            examination.height = data.height
+            examination.weight = data.weight
+            examination.blood_pressure = data.blood_pressure
+            examination.heart_rate = data.heart_rate
+            examination.temperature = data.temperature
+            examination.note = data.note
+            examination.examined_at = data.examined_at or datetime.now(UTC)
+            if appointment.status == AppointmentStatus.COMPLETED:
+                examination.status = "completed"
+            examination = await self.examination_repo.update(examination)
+
+        if data.prescriptions:
+            existing_prescriptions = (
+                await self.prescription_repo.get_by_examination(examination.id)
+            )
+            await self.prescription_repo.delete_many(existing_prescriptions)
+
+            for pres_data in data.prescriptions:
+                prescription = await self.prescription_repo.create(
+                    Prescription(
+                        examination_id=examination.id,
+                        prescription_type=pres_data.prescription_type,
+                        note=pres_data.note,
+                        total_amount=DECIMAL(0),
+                        status=0,
+                    )
+                )
+
+                total = DECIMAL(0)
+                details = []
+                for item in pres_data.items:
+                    medicine = await self.medicine_repo.get_by_id(item.medicine_id)
+                    if not medicine:
+                        raise ResourceNotFound("Không tìm thấy thuốc")
+                    unit_price = medicine.current_price
+                    subtotal = unit_price * item.quantity
+                    total += subtotal
+                    details.append(
+                        PrescriptionDetail(
+                            prescription_id=prescription.id,
+                            medicine_id=item.medicine_id,
+                            quantity=item.quantity,
+                            unit_price=unit_price,
+                            dosage=item.dosage,
+                            frequency=item.frequency,
+                            duration=item.duration,
+                            days=item.days,
+                            instruction=item.instruction,
+                            subtotal=subtotal,
+                        )
+                    )
+
+                await self.prescription_detail_repo.bulk_create(details)
+                prescription.total_amount = total
+                await self.prescription_repo.update(prescription)
+
+            await self._safe_refresh(self.examination_repo, examination)
+            return examination
+
+    @staticmethod
+    async def _safe_refresh(repo, obj):
+        try:
+            await repo.refresh(obj)
+        except Exception:
+            pass
+
+    async def get_appointment_record(
+        self, appointment: Appointment
+    ) -> Examination:
+        examination = await self.examination_repo.get_by_appointment(appointment.id)
+        if not examination:
+            raise ResourceNotFound("Không tìm thấy hồ sơ khám cho lịch hẹn này")
+        return examination
+
+    async def create_payment(
+        self,
+        appointment_id: int,
+        current_user: User,
+        payment_method: str | None = None,
+    ) -> Payment:
+        appointment = await self.appointment_repo.get_by_id_with_relations(
+            appointment_id
+        )
+        if not appointment:
+            raise ResourceNotFound("Không tìm thấy lịch hẹn")
+
+        if current_user.role != UserRole.PATIENT:
+            raise ForbiddenException("Chỉ bệnh nhân mới có thể tạo thanh toán")
+        patient = await self.patient_repo.get_by_user_id(current_user.id)
+        if not patient or patient.id != appointment.patient_id:
+            raise ForbiddenException("Bạn không phải chủ sở hữu của lịch hẹn này")
+
+        if appointment.status not in (
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.PENDING,
+        ):
+            raise BadRequestException(
+                "Chỉ có thể tạo thanh toán cho lịch hẹn đã hoàn thành hoặc đang chờ"
+                " xác nhận"
+            )
+
+        existing_payment = await self.payment_repo.get_by_appointment(
+            appointment_id
+        )
+        if existing_payment:
+            raise ConflictException("Lịch hẹn này đã có thanh toán")
+
+        doctor = appointment.slot.schedule.doctor
+        if not doctor:
+            raise ResourceNotFound("Không tìm thấy bác sĩ của lịch hẹn này")
+        amount = doctor.consultation_fee
+
+        payment = Payment(
+            appointment_id=appointment_id,
+            amount=amount,
+            status=PaymentStatus.PENDING,
+            payment_method=payment_method,
+            transaction_id=None,
+        )
+        await self.payment_repo.create(payment)
+        try:
+            await self.payment_repo.refresh(payment)
+        except Exception:
+            pass
+
+        appointment.status = AppointmentStatus.PAID
+        await self.appointment_repo.update(appointment)
+
+        return payment
 
 
 class SpecialtyService:
+    def __init__(
+        self,
+        specialty_repo: SpecialtyRepoDep,
+        doctor_repo: DoctorRepoDep,
+    ) -> None:
+        self.specialty_repo = specialty_repo
+        self.doctor_repo = doctor_repo
 
-  def __init__(
-      self,
-      specialty_repo: SpecialtyRepoDep,
-      doctor_repo: DoctorRepoDep,
-  ) -> None:
-    self.specialty_repo = specialty_repo
-    self.doctor_repo = doctor_repo
+    async def get_specialties(self) -> list[Specialty]:
+        return await self.specialty_repo.get_active_specialties()
 
-  async def get_specialties(self) -> list[Specialty]:
-    return await self.specialty_repo.get_active_specialties()
+    async def get_specialty(self, specialty_id: int) -> Specialty:
+        specialty = await self.specialty_repo.get_active_by_id(specialty_id)
+        if specialty is None:
+            raise ResourceNotFound("Không tìm thấy chuyên khoa")
+        return specialty
 
-  async def get_specialty(self, specialty_id: int) -> Specialty:
-    specialty = await self.specialty_repo.get_active_by_id(specialty_id)
-    if specialty is None:
-      raise ResourceNotFound("Không tìm thấy chuyên khoa")
-    return specialty
+    async def create_specialty(
+        self, specialty_data: SpecialtyCreate
+    ) -> Specialty:
+        existed = await self.specialty_repo.get_by_name(specialty_data.name)
+        if existed:
+            raise ConflictException("Chuyên khoa đã tồn tại")
+        specialty = Specialty(**specialty_data.model_dump())
+        return await self.specialty_repo.create(specialty)
 
-  async def create_specialty(
-      self, specialty_data: SpecialtyCreate
-  ) -> Specialty:
-    existed = await self.specialty_repo.get_by_name(specialty_data.name)
-    if existed:
-      raise ConflictException("Chuyên khoa đã tồn tại")
-    specialty = Specialty(**specialty_data.model_dump())
-    return await self.specialty_repo.create(specialty)
+    async def toggle_specialty_status(self, specialty_id: int) -> Specialty:
+        specialty = await self.specialty_repo.get_by_id(specialty_id)
+        if specialty is None:
+            raise ResourceNotFound("Không tìm thấy chuyên khoa")
+        return await self.specialty_repo.toggle_status(specialty)
 
-  async def toggle_specialty_status(self, specialty_id: int) -> Specialty:
-    specialty = await self.specialty_repo.get_by_id(specialty_id)
-    if specialty is None:
-      raise ResourceNotFound("Không tìm thấy chuyên khoa")
-    return await self.specialty_repo.toggle_status(specialty)
+    async def update_specialty(
+        self, specialty_id: int, specialty_data: SpecialtyUpdate
+    ) -> Specialty:
+        specialty = await self.specialty_repo.get_active_by_id(specialty_id)
+        if specialty is None:
+            raise ResourceNotFound("Không tìm thấy chuyên khoa")
+        if specialty_data.name and specialty_data.name != specialty.name:
+            existed = await self.specialty_repo.get_by_name(specialty_data.name)
+            if existed:
+                raise ConflictException("Chuyên khoa đã tồn tại")
 
-  async def update_specialty(
-      self, specialty_id: int, specialty_data: SpecialtyUpdate
-  ) -> Specialty:
-    specialty = await self.specialty_repo.get_active_by_id(specialty_id)
-    if specialty is None:
-      raise ResourceNotFound("Không tìm thấy chuyên khoa")
-    if specialty_data.name and specialty_data.name != specialty.name:
-      existed = await self.specialty_repo.get_by_name(specialty_data.name)
-      if existed:
-        raise ConflictException("Chuyên khoa đã tồn tại")
-
-    update_data = specialty_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-      setattr(specialty, field, value)
-    return await self.specialty_repo.update(specialty)
+        update_data = specialty_data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(specialty, field, value)
+        return await self.specialty_repo.update(specialty)
 
 
 class DoctorService:
+    def __init__(
+        self,
+        doctor_repo: DoctorRepoDep,
+        user_repo: UserRepoDep,
+        specialty_repo: SpecialtyRepoDep,
+        schedule_repo: ScheduleRepoDep,
+        appointment_repo: AppointmentRepoDep,
+        slot_repo: ScheduleSlotRepoDep,
+    ) -> None:
+        self.doctor_repo = doctor_repo
+        self.user_repo = user_repo
+        self.specialty_repo = specialty_repo
+        self.schedule_repo = schedule_repo
+        self.appointment_repo = appointment_repo
+        self.slot_repo = slot_repo
 
-  def __init__(
-      self,
-      doctor_repo: DoctorRepoDep,
-      user_repo: UserRepoDep,
-      specialty_repo: SpecialtyRepoDep,
-      schedule_repo: ScheduleRepoDep,
-      appointment_repo: AppointmentRepoDep,
-      slot_repo: ScheduleSlotRepoDep,
-  ) -> None:
-    self.doctor_repo = doctor_repo
-    self.user_repo = user_repo
-    self.specialty_repo = specialty_repo
-    self.schedule_repo = schedule_repo
-    self.appointment_repo = appointment_repo
-    self.slot_repo = slot_repo
+    async def get_profile_by_user_id(self, user_id: int) -> Doctor:
+        doctor = await self.doctor_repo.get_by_user_id(user_id)
+        if doctor is None:
+            raise ResourceNotFound("Không tìm thấy hồ sơ bác sĩ")
+        return doctor
 
-  async def get_profile_by_user_id(self, user_id: int) -> Doctor:
-    doctor = await self.doctor_repo.get_by_user_id(user_id)
-    if doctor is None:
-      raise ResourceNotFound("Không tìm thấy hồ sơ bác sĩ")
-    return doctor
+    async def get_doctors(self, specialty_id: int | None = None) -> list[Doctor]:
+        if specialty_id is None:
+            return await self.doctor_repo.get_active_doctors()
+        return await self.doctor_repo.get_by_specialty(specialty_id)
 
-  async def get_doctors(self, specialty_id: int | None = None) -> list[Doctor]:
-    if specialty_id is None:
-      return await self.doctor_repo.get_active_doctors()
-    return await self.doctor_repo.get_by_specialty(specialty_id)
+    async def get_doctor(self, doctor_id: int) -> Doctor:
+        doctor = await self.doctor_repo.get_active_by_id(doctor_id)
+        if doctor is None:
+            raise ResourceNotFound("Không tìm thấy bác sĩ")
+        return doctor
 
-  async def get_doctor(self, doctor_id: int) -> Doctor:
-    doctor = await self.doctor_repo.get_active_by_id(doctor_id)
-    if doctor is None:
-      raise ResourceNotFound("Không tìm thấy bác sĩ")
-    return doctor
+    async def get_doctor_schedule(self, doctor_id: int):
+        doctor = await self.doctor_repo.get_active_by_id(doctor_id)
+        if doctor is None:
+            raise ResourceNotFound("Không tìm thấy bác sĩ")
+        return await self.schedule_repo.get_doctor_available_schedule(doctor_id)
 
-  async def get_doctor_schedule(self, doctor_id: int):
-    doctor = await self.doctor_repo.get_active_by_id(doctor_id)
-    if doctor is None:
-      raise ResourceNotFound("Không tìm thấy bác sĩ")
-    return await self.schedule_repo.get_doctor_available_schedule(doctor_id)
+    async def update_my_schedule_slot(
+        self,
+        slot: ScheduleSlot,
+        slot_data: ScheduleSlotUpdate,
+    ):
+        if slot.status == ScheduleSlotStatus.BOOKED:
+            raise BadRequestException("Khung giờ đã đặt không thể sửa")
+        update_data = slot_data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(slot, field, value)
+        return await self.slot_repo.update(slot)
 
-  async def update_my_schedule_slot(
-      self,
-      slot: ScheduleSlot,
-      slot_data: ScheduleSlotUpdate,
-  ):
-    if slot.status == ScheduleSlotStatus.BOOKED:
-      raise BadRequestException("Khung giờ đã đặt không thể sửa")
-    update_data = slot_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-      setattr(slot, field, value)
-    return await self.slot_repo.update(slot)
-
-  async def create_doctor(self, doctor_data: DoctorCreate):
-    user = await self.user_repo.get_by_id(doctor_data.user_id)
-    if user is None:
-      raise ResourceNotFound("Không tìm thấy người dùng")
-    if user.role != UserRole.DOCTOR:
-      raise BadRequestException("Người dùng không phải bác sĩ")
-    if await self.doctor_repo.get_by_user_id(doctor_data.user_id):
-      raise ConflictException("Hồ sơ bác sĩ đã tồn tại")
-    specialty = await self.specialty_repo.get_active_by_id(
-        doctor_data.specialty_id
-    )
-    if specialty is None:
-      raise ResourceNotFound("Không tìm thấy chuyên khoa")
-    if await self.doctor_repo.get_by_license(doctor_data.license_number):
-      raise ConflictException("Giấy phép đã tồn tại")
-    doctor = Doctor(
-        id=doctor_data.user_id, **doctor_data.model_dump(exclude={"user_id"})
-    )
-    return await self.doctor_repo.create(doctor)
+    async def create_doctor(self, doctor_data: DoctorCreate):
+        user = await self.user_repo.get_by_id(doctor_data.user_id)
+        if user is None:
+            raise ResourceNotFound("Không tìm thấy người dùng")
+        if user.role != UserRole.DOCTOR:
+            raise BadRequestException("Người dùng không phải bác sĩ")
+        if await self.doctor_repo.get_by_user_id(doctor_data.user_id):
+            raise ConflictException("Hồ sơ bác sĩ đã tồn tại")
+        specialty = await self.specialty_repo.get_active_by_id(
+            doctor_data.specialty_id
+        )
+        if specialty is None:
+            raise ResourceNotFound("Không tìm thấy chuyên khoa")
+        if await self.doctor_repo.get_by_license(doctor_data.license_number):
+            raise ConflictException("Giấy phép đã tồn tại")
+        doctor = Doctor(
+            id=doctor_data.user_id, **doctor_data.model_dump(exclude={"user_id"})
+        )
+        return await self.doctor_repo.create(doctor)
 
 
 class PatientService:
+    def __init__(
+        self,
+        patient_repo: PatientRepoDep,
+        medical_record_repo: MedicalRecordRepoDep,
+        examination_repo: ExaminationRepoDep,
+        doctor_repo: DoctorRepoDep,
+        appointment_repo: AppointmentRepoDep,
+    ):
+        self.patient_repo = patient_repo
+        self.medical_record_repo = medical_record_repo
+        self.examination_repo = examination_repo
+        self.doctor_repo = doctor_repo
+        self.appointment_repo = appointment_repo
 
-  def __init__(
-      self,
-      patient_repo: PatientRepoDep,
-      medical_record_repo: MedicalRecordRepoDep,
-      examination_repo: ExaminationRepoDep,
-      doctor_repo: DoctorRepoDep,
-      appointment_repo: AppointmentRepoDep,
-  ):
-    self.patient_repo = patient_repo
-    self.medical_record_repo = medical_record_repo
-    self.examination_repo = examination_repo
-    self.doctor_repo = doctor_repo
-    self.appointment_repo = appointment_repo
+    async def get_owned_medical_record(self, patient_id: int) -> MedicalRecord:
+        record = await self.medical_record_repo.get_by_patient_id(patient_id)
+        if record is None:
+            raise ResourceNotFound("Không tìm thấy hồ sơ bệnh án")
+        return record
 
-  async def get_owned_medical_record(self, patient_id: int) -> MedicalRecord:
-    record = await self.medical_record_repo.get_by_patient_id(patient_id)
-    if record is None:
-      raise ResourceNotFound("Không tìm thấy hồ sơ bệnh án")
-    return record
+    async def get_profile_by_user_id(self, user_id: int) -> Patient:
+        patient = await self.patient_repo.get_by_user_id(user_id)
+        if patient is None:
+            raise ResourceNotFound("Không tìm thấy hồ sơ bệnh nhân")
+        return patient
 
-  async def get_profile_by_user_id(self, user_id: int) -> Patient:
-    patient = await self.patient_repo.get_by_user_id(user_id)
-    if patient is None:
-      raise ResourceNotFound("Không tìm thấy hồ sơ bệnh nhân")
-    return patient
+    async def get_patient_medical_history(self, patient_id: int) -> dict:
+        medical_record = await self.medical_record_repo.get_by_patient_id(patient_id)
+        examinations = await self.examination_repo.get_by_patient(patient_id)
+        return {
+            "medical_record": medical_record,
+            "examinations": examinations,
+        }
 
-  async def get_patient_medical_history(self, patient_id: int) -> dict:
-    medical_record = await self.medical_record_repo.get_by_patient_id(patient_id)
-    examinations = await self.examination_repo.get_by_patient(patient_id)
-    return {
-        "medical_record": medical_record,
-        "examinations": examinations,
-    }
-
-  async def get_patient_medical_history_with_access(
-      self, patient_id: int, current_user: User
-  ) -> dict:
-    patient = await self.patient_repo.get_by_id(patient_id)
-    if not patient:
-      raise ResourceNotFound("Không tìm thấy bệnh nhân")
-    if current_user.role == UserRole.ADMIN:
-      pass
-    elif current_user.role == UserRole.DOCTOR:
-      doctor = await self.doctor_repo.get_by_user_id(current_user.id)
-      if not doctor:
-        raise ResourceNotFound("Không tìm thấy hồ sơ bác sĩ")
-      has_access = await self.appointment_repo.exists_by_doctor_and_patient(
-          doctor.id, patient_id
-      )
-      if not has_access:
-        raise ForbiddenException(
-            "Bạn không có quyền xem hồ sơ bệnh án của bệnh nhân này"
-        )
-    else:
-      raise ForbiddenException(
-          "Chỉ bác sĩ và quản trị viên mới có quyền truy cập"
-      )
-    medical_record = await self.medical_record_repo.get_by_patient_id(patient_id)
-    examinations = await self.examination_repo.get_by_patient(patient_id)
-    return {"medical_record": medical_record, "examinations": examinations}
+    async def get_patient_medical_history_with_access(
+        self, patient_id: int, current_user: User
+    ) -> dict:
+        patient = await self.patient_repo.get_by_id(patient_id)
+        if not patient:
+            raise ResourceNotFound("Không tìm thấy bệnh nhân")
+        if current_user.role == UserRole.ADMIN:
+            pass
+        elif current_user.role == UserRole.DOCTOR:
+            doctor = await self.doctor_repo.get_by_user_id(current_user.id)
+            if not doctor:
+                raise ResourceNotFound("Không tìm thấy hồ sơ bác sĩ")
+            has_access = await self.appointment_repo.exists_by_doctor_and_patient(
+                doctor.id, patient_id
+            )
+            if not has_access:
+                raise ForbiddenException(
+                    "Bạn không có quyền xem hồ sơ bệnh án của bệnh nhân này"
+                )
+        else:
+            raise ForbiddenException(
+                "Chỉ bác sĩ và quản trị viên mới có quyền truy cập"
+            )
+        medical_record = await self.medical_record_repo.get_by_patient_id(patient_id)
+        examinations = await self.examination_repo.get_by_patient(patient_id)
+        return {"medical_record": medical_record, "examinations": examinations}
 
 
 class ScheduleService:
+    def __init__(
+        self,
+        schedule_repo: ScheduleRepoDep,
+        slot_repo: ScheduleSlotRepoDep,
+    ):
+        self.schedule_repo = schedule_repo
+        self.slot_repo = slot_repo
 
-  def __init__(
-      self,
-      schedule_repo: ScheduleRepoDep,
-      slot_repo: ScheduleSlotRepoDep,
-  ):
-    self.schedule_repo = schedule_repo
-    self.slot_repo = slot_repo
-
-  async def get_owned_slot(self, slot_id: int, doctor_id: int) -> ScheduleSlot:
-    slot = await self.slot_repo.get_by_id_with_schedule(slot_id)
-    if slot is None:
-      raise ResourceNotFound("Không tìm thấy khung giờ")
-    if slot.schedule.doctor_id != doctor_id:
-      raise ForbiddenException(
-          "Bạn không thể truy cập khung giờ của bác sĩ khác"
-      )
-    return slot
+    async def get_owned_slot(self, slot_id: int, doctor_id: int) -> ScheduleSlot:
+        slot = await self.slot_repo.get_by_id_with_schedule(slot_id)
+        if slot is None:
+            raise ResourceNotFound("Không tìm thấy khung giờ")
+        if slot.schedule.doctor_id != doctor_id:
+            raise ForbiddenException(
+                "Bạn không thể truy cập khung giờ của bác sĩ khác"
+            )
+        return slot
 
 
 class PaymentService:
+    def __init__(
+        self,
+        payment_repo: PaymentRepoDep,
+    ):
+        self.payment_repo = payment_repo
 
-  def __init__(
-      self,
-      payment_repo: PaymentRepoDep,
-  ):
-    self.payment_repo = payment_repo
+    async def get_user_payments(self, current_user: User) -> list[PaymentOut]:
+        if current_user.role != UserRole.PATIENT:
+            raise ForbiddenException("Chỉ bệnh nhân mới được xem lịch sử thanh toán")
+        payments = await self.payment_repo.get_by_patient_id(current_user.id)
+        return [PaymentOut.model_validate(p) for p in payments]
 
-  async def get_user_payments(self, current_user: User) -> list[PaymentOut]:
-    if current_user.role != UserRole.PATIENT:
-      raise ForbiddenException("Chỉ bệnh nhân mới được xem lịch sử thanh toán")
-    payments = await self.payment_repo.get_by_patient_id(current_user.id)
-    return [PaymentOut.model_validate(p) for p in payments]
+    async def get_payment_detail(
+        self, payment_id: int, current_user: User
+    ) -> PaymentOut:
+        payment = await self.payment_repo.get_by_id_with_appointment(payment_id)
+        if not payment:
+            raise ResourceNotFound("Không tìm thấy giao dịch")
+        if current_user.role == UserRole.ADMIN:
+            return PaymentOut.model_validate(payment)
 
-  async def get_payment_detail(
-      self, payment_id: int, current_user: User
-  ) -> PaymentOut:
-    payment = await self.payment_repo.get_by_id_with_appointment(payment_id)
-    if not payment:
-      raise ResourceNotFound("Không tìm thấy giao dịch")
-    if current_user.role == UserRole.ADMIN:
-      return PaymentOut.model_validate(payment)
+        if current_user.role == UserRole.PATIENT:
+            if payment.appointment.patient_id != current_user.id:
+                raise ForbiddenException("Bạn không có quyền xem giao dịch này")
+            return PaymentOut.model_validate(payment)
 
-    if current_user.role == UserRole.PATIENT:
-      if payment.appointment.patient_id != current_user.id:
-        raise ForbiddenException("Bạn không có quyền xem giao dịch này")
-      return PaymentOut.model_validate(payment)
-
-    raise ForbiddenException("Bạn không có quyền truy cập giao dịch này")
+        raise ForbiddenException("Bạn không có quyền truy cập giao dịch này")
 
 
 class ReportService:
@@ -849,7 +851,6 @@ class ReportService:
             start_date, end_date
         )
         items = []
-        total = 0
         for specialty_id, specialty_name, count in results:
             items.append(
                 PatientsBySpecialtyItem(
@@ -858,11 +859,6 @@ class ReportService:
                     patient_count=count,
                 )
             )
-            total += count
-
-        total_patients = await self.report_repo.get_total_unique_patients(
-            start_date, end_date
-        )
 
         return PatientsBySpecialtyResponse(items=items)
 
@@ -904,63 +900,29 @@ class ReportService:
             end_date=end_date.date() if end_date else None,
         )
 
-class SpecialtyDetectionService:
-    def __init__(self):
-        self.rules = self._load_rules()
 
-    def detect(self, text: str) -> Optional[str]:
-        pass
+# ==========================================
+# AI & CHAT SERVICES
+# ==========================================
 
-class RAGService:
-    def __init__(self, collection):
-        self.collection = collection
-
-    async def search(self, query: str) -> str:
-        pass
-
-class RAGSearchInput(BaseModel):
-    query: Optional[str] = Field(
-        default=None,
-        description="Từ khóa hoặc câu hỏi cần tra cứu kiến thức y tế, quy trình",
-    )
-
-class DoctorSearchService:
-    def __init__(self, doctor_repo: DoctorRepository):
-        self.doctor_repo = doctor_repo
-
-    async def search(
-        self, specialty_id: int | None = None, max_fee: float | None = None, doctor_name: str | None = None
-    ) -> tuple[list[Doctor], bool]:
-        doctors = await self.doctor_repo.search_doctors_for_ai(
-            specialty_id=specialty_id, max_fee=max_fee, doctor_name=doctor_name
-        )
-        return doctors, bool(doctors)
-
-class EmergencyService:
-    def check(self, text: str) -> bool:
-        return any(k in text for k in EMERGENCY_KEYWORDS)
-
-    def get_response(self) -> str:
-        return "🚨 ..."
-
-
-class LLMService:
-    def __init__(self):
-        self.llm = ChatOllama(...)
-
-    async def generate(self, prompt: str) -> str:
-        response = await self.llm.ainvoke(prompt)
-        return response.content
-
-class SQLDoctorSearchInput(BaseModel):
-    specialty_name: Optional[str] = Field(
-        default=None, description="Tên chuyên khoa (VD: Tim mạch, Cơ Xương Khớp)"
-    )
-    max_fee: Optional[float] = Field(
-        default=None,
-        description="Hạn mức giá khám tối đa VNĐ (VD: 400000, 500000)",
-    )
-
+RAG_KEYWORDS = [
+    "quy trình",
+    "thủ tục",
+    "giấy tờ",
+    "bảo hiểm",
+    "bhyt",
+    "giờ làm việc",
+    "thời gian",
+    "địa chỉ",
+    "ở đâu",
+    "tái khám",
+    "khám bệnh",
+    "trái tuyến",
+    "thứ 7",
+    "thứ bảy",
+    "chủ nhật",
+    "hướng dẫn",
+]
 
 EMERGENCY_KEYWORDS = [
     "khó thở",
@@ -986,29 +948,68 @@ def normalize_vietnamese(text: str) -> str:
     return unicodedata.normalize("NFC", text)
 
 
-class AIService:
-    def __init__(self, doctor_repo: Any, specialty_repo: Any):
-        self.doctor_repo = doctor_repo
-        self.specialty_repo = specialty_repo
-        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-        )
-        self.chroma_client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
+class SpecialtyDetectionService:
+    def __init__(self):
+        self.rules = {
+            "Huyết Học": ["huyết học", "truyền máu", "thiếu máu", "tiểu cầu", "bạch cầu"],
+            "Mắt": ["mắt", "khoa mắt", "khám mắt", "thị lực", "nhìn mờ", "cận thị", "đau mắt", "đỏ mắt"],
+            "Tim Mạch": ["tim mạch", "tim", "huyết áp", "mạch vành", "nhồi máu", "tức ngực", "hồi hộp", "loạn nhịp"],
+            "Cơ Xương Khớp": ["xương khớp", "khớp", "cột sống", "thoái hóa", "đau lưng", "thắt lưng", "lưng", "gối", "vai gáy", "thoát vị"],
+            "Tiêu Hóa": ["tiêu hóa", "dạ dày", "đau bụng", "ợ chua", "trào ngược", "đại tràng", "gan", "mật", "buồn nôn", "tiêu chảy", "thượng vị"],
+            "Tai Mũi Họng": ["tai mũi họng", "tai", "mũi", "họng", "viêm xoang", "ù tai", "nghẹt mũi", "khàn tiếng", "khàn giọng", "amidan"],
+            "Da Liễu": ["da liễu", "dị ứng", "mề đay", "mẩn ngứa", "vảy nến", "nấm da", "mụn"],
+            "Thần Kinh": ["thần kinh", "đau đầu", "đau nửa đầu", "chóng mặt", "mất ngủ", "đột quỵ", "tai biến", "tê bì"],
+            "Phụ Sản": ["sản", "phụ khoa", "thai", "sinh", "kinh nguyệt", "buồng trứng", "tử cung"],
+            "Hô Hấp": ["phổi", "hô hấp", "ho", "viêm phế quản", "hen suyễn"],
+            "Thận - Tiết Niệu": ["thận", "tiết niệu", "tiểu buốt", "tiểu đêm", "sỏi thận"],
+        }
+
+    def detect(self, text: str) -> Optional[str]:
+        if not text:
+            return None
+        text_norm = normalize_vietnamese(text).lower()
+        text_norm = re.sub(r'[.,!?;:()\[\]{}"\'\\]', " ", text_norm)
+        tokens = text_norm.split()
+
+        # Nhi khoa
+        if any(token in ["nhi", "nhi khoa", "bé", "trẻ em", "trẻ nhỏ", "sơ sinh", "cháu", "con"] for token in tokens):
+            return "Nhi Khoa"
+        if "con" in tokens and "tôi" in tokens:
+            return "Nhi Khoa"
+
+        # Cấp cứu
+        if any(term in text_norm for term in ["cấp cứu", "a9", "nguy cấp", "nguy kịch"]):
+            return "Cấp Cứu A9"
+        if any(term in text_norm for term in ["hồi sức", "icu", "thở máy"]):
+            return "Hồi Sức Tích Cực"
+
+        # Chuyên khoa
+        for spec, keywords in self.rules.items():
+            for kw in keywords:
+                if " " in kw:
+                    if kw in text_norm:
+                        return spec
+                else:
+                    if kw in tokens:
+                        return spec
+        return None
+
+
+class RAGService:
+    def __init__(self):
+        self.collection = None
         try:
+            self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+            )
+            self.chroma_client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
             self.collection = self.chroma_client.get_collection(
                 name=COLLECTION_NAME, embedding_function=self.embedding_fn
             )
-        except Exception:
+        except Exception as e:
             self.collection = None
 
-        self.llm = ChatOllama(
-            model=settings.OLLAMA_MODEL,
-            base_url=settings.OLLAMA_BASE_URL,
-            temperature=0.1,
-            stop=["<|im_end|>", "<|endoftext|>", "User:", "Human:"]
-        )
-
-    def _rag_search_sync(self, query: str, top_k: int = 3) -> str:
+    def _search_sync(self, query: str, top_k: int = 3) -> str:
         if not self.collection:
             return ""
         try:
@@ -1018,163 +1019,184 @@ class AIService:
                 return ""
             return "\n---\n".join(documents)
         except Exception as e:
-            print(f"[RAG Query Error]: {e}")
             return ""
 
-    async def rag_search(self, query: str) -> str:
+    async def search(self, query: str) -> str:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._rag_search_sync, query)
+        return await loop.run_in_executor(None, self._search_sync, query)
 
-    def _extract_turn_content(self, turn: Any) -> str:
-        if isinstance(turn, dict):
-            return str(turn.get("content", "") or "")
-        return str(getattr(turn, "content", "") or "")
 
-    def _match_word_safe(self, pattern_text: str, text: str) -> bool:
-        p = r"(?<![a-zA-Z0-9_])" + pattern_text + r"(?![a-zA-Z0-9_])"
-        return bool(re.search(p, text, re.IGNORECASE))
+class DoctorSearchService:
+    def __init__(self, doctor_repo: DoctorRepository):
+        self.doctor_repo = doctor_repo
 
-    def _detect_specialty_from_text(self, text: str) -> Optional[str]:
+    async def search(
+        self,
+        specialty_name: str | None = None,
+        max_fee: float | None = None,
+        doctor_name: str | None = None,
+    ) -> tuple[list[Doctor], bool]:
+        doctors = await self.doctor_repo.search_doctors_for_ai(
+            specialty_name=None, max_fee=None
+        )
+        if not doctors:
+            return [], False
+
+        if doctor_name:
+            d_name_lower = doctor_name.lower().strip()
+            doctors = [
+                d for d in doctors
+                if d_name_lower in (
+                    getattr(d, "full_name", "")
+                    or (d.user.full_name if getattr(d, "user", None) else "")
+                ).lower()
+            ]
+            if not doctors:
+                return [], False
+
+        if specialty_name:
+            spec_lower = specialty_name.lower().strip()
+            doctors = [
+                d for d in doctors
+                if getattr(d, "specialty", None) and d.specialty.name
+                and (spec_lower in d.specialty.name.lower() or d.specialty.name.lower() in spec_lower)
+            ]
+            if not doctors:
+                return [], False
+
+        if max_fee and max_fee > 0:
+            doctors = [
+                d for d in doctors
+                if float(getattr(d, "consultation_fee", 0) or 0) <= max_fee
+            ]
+            if not doctors:
+                return [], False
+
+        doctors.sort(key=lambda d: float(getattr(d, "consultation_fee", 0) or 0))
+        return doctors[:5], True
+
+class EmergencyService:
+    KEYWORDS = EMERGENCY_KEYWORDS
+
+    def check(self, text: str) -> bool:
         if not text:
-            return None
-        text_norm = normalize_vietnamese(text).lower()
-        text_norm = re.sub(r'[.,!?;:()\[\]{}"\'\\]', ' ', text_norm)
-        tokens = text_norm.split()
+            return False
+        text_lower = text.lower()
+        return any(k in text_lower for k in self.KEYWORDS)
 
-        # 1. Nhi khoa: chỉ nhận khi token "nhi" độc lập
-        if any(
-            token
-            in ["nhi", "nhi khoa", "bé", "trẻ em", "trẻ nhỏ", "sơ sinh", "cháu", "con"]
-            for token in tokens
-        ):
-            return "Nhi Khoa"
-        if "con" in tokens and "tôi" in tokens:
-            return "Nhi Khoa"
+    def get_response(self) -> str:
+        return (
+            "🚨 **CẢNH BÁO KHẨN CẤP Y TẾ:**\n\n"
+            "Các triệu chứng như khó thở dữ dội, đau ngực cấp tính cần được can thiệp y tế NGAY LẬP TỨC!\n\n"
+            "🏥 **Trung tâm Cấp cứu A9 – Bệnh viện Bạch Mai:**\n"
+            "- **Địa chỉ:** 78 Đường Giải Phóng, Phường Phương Mai, Đống Đa, Hà Nội (Toà nhà A9 - Cổng vào có biển chỉ dẫn cấp cứu trực tiếp).\n"
+            "- **Thời gian:** Tiếp nhận bệnh nhân 24/7 (tất cả các ngày trong tuần).\n"
+            "- **Hotline Cấp cứu:** 024 3869 3731 hoặc liên hệ ngay **115**.\n\n"
+            "⚠️ *Gia đình vui lòng đưa người bệnh đến thẳng Trung tâm Cấp cứu A9, không chờ đợi đặt lịch trực tuyến.*"
+        )
 
-        # 2. Cấp cứu / Hồi sức
-        if any(
-            term in text_norm for term in ["cấp cứu", "a9", "nguy cấp", "nguy kịch"]
-        ):
-            return "Cấp Cứu A9"
-        if any(term in text_norm for term in ["hồi sức", "icu", "thở máy"]):
-            return "Hồi Sức Tích Cực"
 
-        # 3. Các chuyên khoa khác
-        specialty_rules = {
-            "Huyết Học": [
-                "huyết học",
-                "truyền máu",
-                "thiếu máu",
-                "tiểu cầu",
-                "bạch cầu",
-            ],
-            "Mắt": [
-                "mắt",
-                "khoa mắt",
-                "khám mắt",
-                "thị lực",
-                "nhìn mờ",
-                "cận thị",
-                "đau mắt",
-                "đỏ mắt",
-            ],
-            "Tim Mạch": [
-                "tim mạch",
-                "tim",
-                "huyết áp",
-                "mạch vành",
-                "nhồi máu",
-                "tức ngực",
-                "hồi hộp",
-                "loạn nhịp",
-            ],
-            "Cơ Xương Khớp": [
-                "xương khớp",
-                "khớp",
-                "cột sống",
-                "thoái hóa",
-                "đau lưng",
-                "thắt lưng",
-                "lưng",
-                "gối",
-                "vai gáy",
-                "thoát vị",
-            ],
-            "Tiêu Hóa": [
-                "tiêu hóa",
-                "dạ dày",
-                "đau bụng",
-                "ợ chua",
-                "trào ngược",
-                "đại tràng",
-                "gan",
-                "mật",
-                "buồn nôn",
-                "tiêu chảy",
-                "thượng vị",
-            ],
-            "Tai Mũi Họng": [
-                "tai mũi họng",
-                "tai",
-                "mũi",
-                "họng",
-                "viêm xoang",
-                "ù tai",
-                "nghẹt mũi",
-                "khàn tiếng",
-                "khàn giọng",
-                "amidan",
-            ],
-            "Da Liễu": [
-                "da liễu",
-                "dị ứng",
-                "mề đay",
-                "mẩn ngứa",
-                "vảy nến",
-                "nấm da",
-                "mụn",
-            ],
-            "Thần Kinh": [
-                "thần kinh",
-                "đau đầu",
-                "đau nửa đầu",
-                "chóng mặt",
-                "mất ngủ",
-                "đột quỵ",
-                "tai biến",
-                "tê bì",
-            ],
-            "Phụ Sản": [
-                "sản",
-                "phụ khoa",
-                "thai",
-                "sinh",
-                "kinh nguyệt",
-                "buồng trứng",
-                "tử cung",
-            ],
-            "Hô Hấp": ["phổi", "hô hấp", "ho", "viêm phế quản", "hen suyễn"],
-            "Thận - Tiết Niệu": [
-                "thận",
-                "tiết niệu",
-                "tiểu buốt",
-                "tiểu đêm",
-                "sỏi thận",
-            ],
-        }
+class LLMService:
+    def __init__(self):
+        self.llm = ChatOllama(
+            model=settings.OLLAMA_MODEL,
+            base_url=settings.OLLAMA_BASE_URL,
+            temperature=0.1,
+            stop=["<|im_end|>", "<|endoftext|>", "User:", "Human:"],
+        )
 
-        for spec, keywords in specialty_rules.items():
-            for kw in keywords:
-                if ' ' in kw:  # Cụm từ có khoảng trắng
-                    if kw in text_norm:
-                        return spec
-                else:  # Từ đơn
-                    if kw in tokens:
-                        return spec
+    async def generate(self, prompt: str) -> str:
+        try:
+            response = await self.llm.ainvoke(prompt)
+            return response.content if hasattr(response, "content") else str(response)
+        except Exception as e:
+            return (
+                "Xin chào, tôi là trợ lý ảo Bệnh viện Bạch Mai. "
+                "Hiện tại hệ thống AI đang bận xử lý, vui lòng liên hệ hotline 1900 888 866 hoặc đến trực tiếp 78 Giải Phóng, Hà Nội để được hỗ trợ tốt nhất."
+            )
+
+
+class AIChatService:
+    FALLBACK_SPECIALTY_RULES = {
+        "Mắt": ["mắt", "khoa mắt", "khám mắt"],
+        "Nhi Khoa": ["nhi", "trẻ em", "bé", "sốt phát ban"],
+        "Huyết Học": ["huyết học", "truyền máu"],
+        "Hồi Sức Tích Cực": ["hồi sức", "icu"],
+        "Tim Mạch": ["tim mạch", "tim"],
+        "Tiêu Hóa": ["tiêu hóa", "dạ dày"],
+        "Cơ Xương Khớp": ["xương khớp", "khớp", "cột sống"],
+    }
+
+    def __init__(
+        self,
+        specialty_detector: SpecialtyDetectionService,
+        doctor_search: DoctorSearchService,
+        rag_service: RAGService,
+        emergency_service: EmergencyService,
+        llm_service: LLMService,
+    ):
+        self.specialty_detector = specialty_detector
+        self.doctor_search = doctor_search
+        self.rag_service = rag_service
+        self.emergency_service = emergency_service
+        self.llm_service = llm_service
+
+    def _resolve_specialty(
+        self, user_message: str, chat_history: list[Any] | None
+    ) -> Optional[str]:
+        specialty = self.specialty_detector.detect(user_message)
+        if specialty or not chat_history:
+            return specialty
+
+        for turn in reversed(chat_history):
+            content = self._extract_turn_content(turn)
+            inherited = self.specialty_detector.detect(content)
+            if inherited:
+                return inherited
+
+        for turn in reversed(chat_history):
+            text_lower = self._extract_turn_content(turn).lower()
+            for spec, kws in self.FALLBACK_SPECIALTY_RULES.items():
+                if any(kw in text_lower for kw in kws):
+                    return spec
         return None
 
+    def _build_not_found_message(
+        self,
+        specialty: Optional[str],
+        max_fee: Optional[float],
+        doctor_name: Optional[str],
+    ) -> str:
+        if doctor_name:
+            reason = f"Không tìm thấy bác sĩ '{doctor_name}' trong hệ thống của Bệnh viện Bạch Mai."
+        elif specialty and max_fee:
+            reason = f"Hiện không có bác sĩ nào thuộc chuyên khoa '{specialty}' có giá khám dưới {max_fee:,.0f} VNĐ."
+        elif specialty:
+            reason = f"Không tìm thấy bác sĩ nào thuộc chuyên khoa '{specialty}' trong cơ sở dữ liệu."
+        elif max_fee:
+            reason = f"Hiện không có bác sĩ nào có giá khám dưới {max_fee:,.0f} VNĐ."
+        else:
+            reason = "Không tìm thấy bác sĩ phù hợp với yêu cầu của bạn."
+        return (
+            f"{reason} Tôi khuyên bạn nên đến Khoa Khám bệnh (78 Giải Phóng, Hà Nội) "
+            f"để đăng ký khám theo diện BHYT hoặc khám thông thường."
+        )
+
+    def _extract_turn_content(self, msg: Any) -> str:
+        if isinstance(msg, dict):
+            return f"{msg.get('role', 'User')}: {msg.get('content', '')}"
+        if isinstance(msg, (list, tuple)) and len(msg) >= 2:
+            return f"{msg[0]}: {msg[1]}"
+        if hasattr(msg, "content"):
+            role = getattr(msg, "role", "User")
+            return f"{role}: {msg.content}"
+        return str(msg)
+
     def _extract_max_fee(self, text: str) -> Optional[float]:
+        if not text:
+            return None
         text_lower = normalize_vietnamese(text).lower()
+
         match_unit = re.search(
             r"(\d+[\.,]?\d*)\s*(k|nghìn|ngàn|tr|triệu|đ|đồng|vnd|vnđ)", text_lower
         )
@@ -1191,9 +1213,7 @@ class AIService:
             except Exception:
                 pass
 
-        match_prefix = re.search(
-            r"(dưới|tầm|khoảng|giá|mức)\s+(\d{2,6})", text_lower
-        )
+        match_prefix = re.search(r"(dưới|tầm|khoảng|giá|mức)\s+(\d{2,6})", text_lower)
         if match_prefix:
             try:
                 val = float(match_prefix.group(2))
@@ -1204,223 +1224,55 @@ class AIService:
                 pass
         return None
 
-    def _extract_specific_doctor_name(self, text: str) -> Optional[str]:
-        """Trích xuất tên bác sĩ chính xác và lọc toàn diện các từ bắt đầu không hợp lệ"""
+    def _extract_doctor_name(self, text: str) -> Optional[str]:
         if not text:
             return None
         text_norm = normalize_vietnamese(text)
-
         prefix_pattern = r"(?:bác\s+sĩ|bs\.?|tiến\s+sĩ|thạc\s+sĩ|pgs\.?\s*ts\.?|gs\.?\s*ts\.?|ts\.?|dr\.?)\s+([A-ZÀ-Ỹa-zà-ỹ\s]+)"
         match = re.search(prefix_pattern, text_norm, re.IGNORECASE)
         if match:
             raw_name = match.group(1).strip()
-            # Cắt bỏ phần câu hỏi phụ
             stop_words = r"\b(có|ở|tại|làm việc|khám|không|tư vấn|cho|nào|được|\?|,|\.)\b"
             clean_name = re.split(stop_words, raw_name, flags=re.IGNORECASE)[0].strip()
-
             invalid_starts = [
-                "cho", "nào", "tư vấn", "hãy", "giúp", "trực", "khoa", "bệnh viện", "trung tâm",
-                "đang", "công tác", "làm việc", "phụ trách", "chữa", "khám"
+                "cho", "nào", "tư vấn", "hãy", "giúp", "trực", "khoa",
+                "bệnh viện", "trung tâm", "đang", "công tác", "làm việc",
+                "phụ trách", "chữa", "khám"
             ]
             words = clean_name.split()
             if not words or words[0].lower() in invalid_starts:
                 return None
-
             if len(words) >= 2 and words[1].lower() in ["công tác", "làm việc", "phụ trách"]:
                 return None
-
             if 2 <= len(words) <= 5:
-                if not any(k in clean_name.lower() for k in ["bạch mai", "trung tâm", "khoa", "bệnh viện", "phòng"]):
+                if not any(
+                    k in clean_name.lower()
+                    for k in ["bạch mai", "trung tâm", "khoa", "bệnh viện", "phòng"]
+                ):
                     return clean_name
         return None
 
-    async def sql_doctor_search(
-        self, specialty_name: Optional[str] = None, max_fee: Optional[float] = None, doctor_name: Optional[str] = None
-    ) -> tuple[list[str], bool]:
-        """Trả về tuple: (danh_sách_bác_sĩ, có_tìm_thấy_hay_không)"""
-        try:
-            doctors = await self.doctor_repo.search_doctors_for_ai(
-                specialty_name=None, max_fee=None
-            )
-            if not doctors:
-                return ["Chưa có dữ liệu bác sĩ trong hệ thống."], False
+    def _format_doctors_response(self, doctors: list[Doctor]) -> str:
+        if not doctors:
+            return "Không tìm thấy bác sĩ phù hợp với yêu cầu của bạn."
+        lines = ["Danh sách bác sĩ phù hợp tại Bệnh viện Bạch Mai:"]
+        for doc in doctors[:5]:
+            s_name = doc.specialty.name if doc.specialty else "Đa Khoa"
+            name = doc.user.full_name if doc.user else f"Bác sĩ ID {doc.id}"
+            degree = doc.degree or "Bác sĩ"
+            fee = float(doc.consultation_fee) if doc.consultation_fee else 0.0
+            lines.append(f"- {degree} {name} | Chuyên khoa: {s_name} | Giá khám: {fee:,.0f} VNĐ")
+        lines.append("\nBạn có thể đặt lịch khám trực tiếp qua hệ thống.")
+        return "\n".join(lines)
 
-            # 1. Tìm đích danh theo tên bác sĩ
-            if doctor_name:
-                d_name_lower = doctor_name.lower().strip()
-                matched_named_docs = []
-                for d in doctors:
-                    full_name = getattr(d, "full_name", "") or (d.user.full_name if hasattr(d, "user") and d.user else "")
-                    if d_name_lower in full_name.lower():
-                        matched_named_docs.append(d)
-                if not matched_named_docs:
-                    return [f"Không tìm thấy bác sĩ '{doctor_name}' trong hệ thống của Bệnh viện Bạch Mai."], False
-                doctors = matched_named_docs
-
-            # 2. Lọc theo chuyên khoa
-            if specialty_name:
-                spec_lower = specialty_name.lower().strip()
-                matched_doctors = []
-                for d in doctors:
-                    if hasattr(d, "specialty") and d.specialty and d.specialty.name:
-                        d_spec = d.specialty.name.lower()
-                        if spec_lower in d_spec or d_spec in spec_lower:
-                            matched_doctors.append(d)
-                doctors = matched_doctors
-
-            if not doctors:
-                return [f"Không tìm thấy bác sĩ nào thuộc chuyên khoa '{specialty_name}' trong cơ sở dữ liệu."], False
-
-            # 3. Lọc theo giá tối đa
-            if max_fee and max_fee > 0:
-                doctors = [
-                    d
-                    for d in doctors
-                    if float(getattr(d, "consultation_fee", 0) or 0) <= max_fee
-                ]
-
-            if not doctors:
-                prefix = (
-                    f"thuộc chuyên khoa '{specialty_name}' " if specialty_name else ""
-                )
-                return [
-                    f"Hiện không có bác sĩ nào {prefix}có giá khám dưới {max_fee:,.0f} VNĐ."
-                ], False
-
-            doctors.sort(key=lambda d: float(getattr(d, "consultation_fee", 0) or 0))
-
-            res = []
-            for doc in doctors[:5]:
-                s_name = doc.specialty.name if (hasattr(doc, "specialty") and doc.specialty) else "Đa Khoa"
-                name = getattr(doc, "full_name", None) or (doc.user.full_name if hasattr(doc, "user") and doc.user else f"Bác sĩ ID {doc.id}")
-                degree = getattr(doc, "degree", "Bác sĩ") or "Bác sĩ"
-                fee = float(doc.consultation_fee) if getattr(doc, "consultation_fee", None) else 0.0
-                res.append(f"- {degree} {name} | Chuyên khoa: {s_name} | Giá khám: {fee:,.0f} VNĐ")
-
-            return res, True
-        except Exception as e:
-            print(f"[SQL Doctor Search Error]: {e}")
-            return [f"Lỗi truy vấn bác sĩ: {str(e)}"], False
-
-    async def chat_with_agent(
-        self, user_message: str, chat_history: Optional[list[Any]] = None
+    def _build_rag_prompt(
+        self, user_message: str, context_rag: str, chat_history: list[Any] | None
     ) -> str:
-        print(f"[DEBUG] user_message = {user_message!r}")
-        print(f"[DEBUG] chat_history length = {len(chat_history) if chat_history else 0}")
+        history_text = ""
         if chat_history:
-            for i, turn in enumerate(chat_history):
-                print(f"[DEBUG] turn {i}: {self._extract_turn_content(turn)!r}")
-        try:
-            msg_norm = normalize_vietnamese(user_message)
-            msg_lower = msg_norm.lower()
+            history_text = "\n".join([f"- {self._extract_turn_content(msg)}" for msg in chat_history[-4:]])
 
-            # [BƯỚC 1: EMERGENCY INTERCEPTOR]
-            if any(k in msg_lower for k in EMERGENCY_KEYWORDS) or (
-                "a9" in msg_lower and "ở đâu" in msg_lower
-            ):
-                return (
-                    "🚨 **CẢNH BÁO KHẨN CẤP Y TẾ:**\n\n"
-                    "Các triệu chứng như khó thở dữ dội, đau ngực cấp tính cần được can thiệp y tế NGAY LẬP TỨC!\n\n"
-                    "🏥 **Trung tâm Cấp cứu A9 – Bệnh viện Bạch Mai:**\n"
-                    "- **Địa chỉ:** 78 Đường Giải Phóng, Phường Phương Mai, Đống Đa, Hà Nội (Toà nhà A9 - Cổng vào có biển chỉ dẫn cấp cứu trực tiếp).\n"
-                    "- **Thời gian:** Tiếp nhận bệnh nhân 24/7 (tất cả các ngày trong tuần).\n"
-                    "- **Hotline Cấp cứu:** 024 3869 3731 hoặc liên hệ ngay **115**.\n\n"
-                    "⚠️ *Gia đình vui lòng đưa người bệnh đến thẳng Trung tâm Cấp cứu A9, không chờ đợi đặt lịch trực tuyến.*"
-                )
-
-            # [BƯỚC 2: MULTI-TURN ENTITY RESOLUTION]
-            target_specialty = self._detect_specialty_from_text(msg_norm)
-            max_fee = self._extract_max_fee(msg_norm)
-            specific_doctor = self._extract_specific_doctor_name(msg_norm)
-
-            print(f"[DEBUG] Bước 2 - target_specialty ban đầu: {target_specialty}")
-            print(f"[DEBUG] Bước 2 - max_fee: {max_fee}")
-            print(f"[DEBUG] Bước 2 - specific_doctor: {specific_doctor}")
-
-            # Quét ngược lịch sử hội thoại
-            if not target_specialty and chat_history:
-                for turn in reversed(chat_history):
-                    prev_content = normalize_vietnamese(
-                        self._extract_turn_content(turn)
-                    )
-                    print(f"[DEBUG] Quét lịch sử: {prev_content[:80]}...")
-                    inherited_spec = self._detect_specialty_from_text(prev_content)
-                    print(f"[DEBUG] Kết quả phát hiện chuyên khoa: {inherited_spec}")
-                    if inherited_spec:
-                        target_specialty = inherited_spec
-                        break
-
-                # Fallback dự phòng: Quét trực tiếp các từ khóa chuyên khoa mạnh trong lịch sử
-                if not target_specialty:
-                    print("[DEBUG] Fallback quét chuyên khoa mạnh...")
-                    fallback_rules = {
-                        "Mắt": ["mắt", "khoa mắt", "khám mắt"],
-                        "Nhi Khoa": ["nhi", "trẻ em", "bé", "sốt phát ban"],
-                        "Huyết Học": ["huyết học", "truyền máu"],
-                        "Hồi Sức Tích Cực": ["hồi sức", "icu"],
-                        "Tim Mạch": ["tim mạch", "tim"],
-                        "Tiêu Hóa": ["tiêu hóa", "dạ dày"],
-                        "Cơ Xương Khớp": ["xương khớp", "khớp", "cột sống"],
-                    }
-                    for turn in reversed(chat_history):
-                        turn_text = normalize_vietnamese(self._extract_turn_content(turn)).lower()
-                        for spec, kws in fallback_rules.items():
-                            if any(kw in turn_text for kw in kws):
-                                print(f"[DEBUG] Fallback tìm thấy: {spec}")
-                                target_specialty = spec
-                                break
-                        if target_specialty:
-                            break
-            print(f"[DEBUG] Bước 2 - target_specialty cuối cùng: {target_specialty}")
-            print(f"[DEBUG] Bước 2 - has_doctor_intent sẽ là: {bool(target_specialty or max_fee or specific_doctor or any(k in msg_lower for k in ['bác sĩ', 'giá', 'chi phí', 'bao nhiêu']))}")
-            # [BƯỚC 3: RAG SEARCH]
-            rag_strong_keywords = [
-                "quy trình", "thủ tục", "giấy tờ", "bảo hiểm", "giờ làm việc",
-                "thời gian", "địa chỉ", "ở đâu", "tái khám", "khám bệnh", "trái tuyến", "thứ 7", "thứ bảy", "chủ nhật"
-            ]
-            is_rag_query = any(k in msg_lower for k in rag_strong_keywords)
-
-            context_rag = ""
-            if is_rag_query:
-                context_rag = await self.rag_search(msg_norm)
-
-            # [BƯỚC 4: SQL DOCTOR SEARCH]
-            has_doctor_intent = bool(
-                target_specialty or
-                max_fee or
-                specific_doctor or
-                any(k in msg_lower for k in ["bác sĩ", "giá", "chi phí", "bao nhiêu"])
-            )
-
-            # Ưu tiên RAG tuyệt đối nếu là câu hỏi thủ tục hành chính và không chỉ định bác sĩ/giá/chuyên khoa rõ ràng
-            if is_rag_query and not (target_specialty or max_fee or specific_doctor):
-                has_doctor_intent = False
-
-            doctor_lines, found_doctors = [], False
-            if has_doctor_intent:
-                doctor_lines, found_doctors = await self.sql_doctor_search(
-                    specialty_name=target_specialty, max_fee=max_fee, doctor_name=specific_doctor
-                )
-
-            # [BƯỚC 5: TỔNG HỢP PHẢN HỒI]
-            if found_doctors:
-                doctors_str = "\n".join(doctor_lines)
-                return (
-                    f"Dưới đây là danh sách bác sĩ tại Bệnh viện Bạch Mai phù hợp với yêu cầu của bạn:\n\n"
-                    f"{doctors_str}\n\n"
-                    f"Bạn có thể liên hệ tổng đài hoặc đến Khoa Khám bệnh (78 Giải Phóng, Hà Nội) để đăng ký khám với bác sĩ."
-                )
-            elif has_doctor_intent and not found_doctors:
-                reason = doctor_lines[0] if doctor_lines else "Không tìm thấy bác sĩ phù hợp."
-                return f"{reason} Tôi khuyên bạn nên đến Khoa Khám bệnh (78 Giải Phóng, Hà Nội) để đăng ký khám theo diện BHYT hoặc khám thông thường."
-            else:
-                history_text = ""
-                if chat_history:
-                    history_text = "\n".join(
-                        [f"- {self._extract_turn_content(msg)}" for msg in chat_history[-4:]]
-                    )
-
-                system_prompt = f"""Bạn là Trợ lý AI Bệnh viện Bạch Mai (78 Giải Phóng, Hà Nội).
+        return f"""Bạn là Trợ lý AI Bệnh viện Bạch Mai (78 Giải Phóng, Hà Nội).
 BẮT BUỘC 100% TRẢ LỜI BẰNG TIẾNG VIỆT.
 
 Lịch sử hội thoại:
@@ -1431,11 +1283,42 @@ Tài liệu quy trình & kiến thức bệnh viện (RAG):
 
 Hãy trả lời câu hỏi: "{user_message}" một cách ân cần, ngắn gọn và luôn hướng dẫn người bệnh đến Khoa Khám bệnh (78 Giải Phóng, Hà Nội) khi cần thiết:"""
 
-                response = await self.llm.ainvoke(system_prompt)
-                return response.content if hasattr(response, "content") else str(response)
+    async def chat(
+        self, user_message: str, chat_history: list[Any] | None = None
+    ) -> str:
+        msg_lower = user_message.lower()
 
-        except Exception as e:
-            print(f"[AIService Error]: {e}")
-            return "Xin lỗi, hệ thống tư vấn đang bận. Bạn có thể đến trực tiếp Khoa Khám bệnh - Bệnh viện Bạch Mai (78 Giải Phóng, Hà Nội) để được hỗ trợ tốt nhất."
+        if self.emergency_service.check(msg_lower):
+            return self.emergency_service.get_response()
 
+        specialty = self._resolve_specialty(user_message, chat_history)
+        max_fee = self._extract_max_fee(user_message)
+        doctor_name = self._extract_doctor_name(user_message)
 
+        is_rag_query = any(k in msg_lower for k in RAG_KEYWORDS)
+        context_rag = await self.rag_service.search(user_message) if is_rag_query else ""
+
+        doctor_query_intent = bool(
+            specialty
+            or max_fee
+            or doctor_name
+            or any(k in msg_lower for k in ["bác sĩ", "giá", "chi phí", "bao nhiêu"])
+        )
+        if is_rag_query and not (specialty or max_fee or doctor_name):
+            doctor_query_intent = False
+
+        doctors, found = [], False
+        if doctor_query_intent:
+            doctors, found = await self.doctor_search.search(
+                specialty_name=specialty,
+                max_fee=max_fee,
+                doctor_name=doctor_name,
+            )
+
+        if found:
+            return self._format_doctors_response(doctors)
+        elif doctor_query_intent:
+            return self._build_not_found_message(specialty, max_fee, doctor_name)
+        else:
+            prompt = self._build_rag_prompt(user_message, context_rag, chat_history)
+            return await self.llm_service.generate(prompt)

@@ -282,10 +282,9 @@ ai_router = APIRouter(prefix="/ai", tags=["Chatbot AI"])
 @ai_router.post("/chat", response_model=ChatResponse)
 async def chat_with_ai(
     request: ChatRequest,
-    ai_service: AIServiceDep,
+    ai_chat_service: AIChatServiceDep,
 ):
-    print(f"[DEBUG] request.chat_history = {request.chat_history}")
-    reply = await ai_service.chat_with_agent(
+    reply = await ai_chat_service.chat(
         user_message=request.message,
         chat_history=request.chat_history
     )

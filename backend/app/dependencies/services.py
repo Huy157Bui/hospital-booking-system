@@ -2,7 +2,6 @@ from typing import Annotated
 
 from fastapi import Depends
 
-
 from app.dependencies.repos import (
     AppointmentRepoDep,
     DoctorRepoDep,
@@ -19,18 +18,22 @@ from app.dependencies.repos import (
     SpecialtyRepoDep,
     UserRepoDep,
 )
-
 from app.services import (
+    AIChatService,
     AppointmentService,
     AuthService,
+    DoctorSearchService,
     DoctorService,
+    EmergencyService,
+    LLMService,
     PatientService,
     PaymentService,
+    RAGService,
     ReportService,
     ScheduleService,
+    SpecialtyDetectionService,
     SpecialtyService,
     UserService,
-    AIService,
 )
 
 
@@ -66,18 +69,14 @@ AppointmentServiceDep = Annotated[
 ]
 
 
-def get_auth_service(
-    user_repo: UserRepoDep,
-) -> AuthService:
+def get_auth_service(user_repo: UserRepoDep) -> AuthService:
     return AuthService(user_repo=user_repo)
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
-def get_user_service(
-    user_repo: UserRepoDep,
-) -> UserService:
+def get_user_service(user_repo: UserRepoDep) -> UserService:
     return UserService(user_repo=user_repo)
 
 
@@ -157,17 +156,70 @@ def get_payment_service(payment_repo: PaymentRepoDep) -> PaymentService:
 PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]
 
 
-async def get_report_service(
+def get_report_service(
     payment_repo: PaymentRepoDep, report_repo: ReportRepoDep
 ) -> ReportService:
     return ReportService(payment_repo=payment_repo, report_repo=report_repo)
 
+
 ReportServiceDep = Annotated[ReportService, Depends(get_report_service)]
 
-async def get_ai_service(
-    doctor_repo: DoctorRepoDep,
-    specialty_repo: SpecialtyRepoDep,
-) -> AIService:
-    return AIService(doctor_repo=doctor_repo, specialty_repo=specialty_repo)
 
-AIServiceDep = Annotated[AIService, Depends(get_ai_service)]
+def get_specialty_detection_service() -> SpecialtyDetectionService:
+    return SpecialtyDetectionService()
+
+
+SpecialtyDetectionServiceDep = Annotated[
+    SpecialtyDetectionService, Depends(get_specialty_detection_service)
+]
+
+
+def get_rag_service() -> RAGService:
+    return RAGService()
+
+
+RAGServiceDep = Annotated[RAGService, Depends(get_rag_service)]
+
+
+def get_emergency_service() -> EmergencyService:
+    return EmergencyService()
+
+
+EmergencyServiceDep = Annotated[EmergencyService, Depends(get_emergency_service)]
+
+
+def get_llm_service() -> LLMService:
+    return LLMService()
+
+
+LLMServiceDep = Annotated[LLMService, Depends(get_llm_service)]
+
+
+def get_doctor_search_service(
+    doctor_repo: DoctorRepoDep,
+) -> DoctorSearchService:
+    return DoctorSearchService(doctor_repo=doctor_repo)
+
+
+DoctorSearchServiceDep = Annotated[
+    DoctorSearchService, Depends(get_doctor_search_service)
+]
+
+
+def get_ai_chat_service(
+    specialty_detector: SpecialtyDetectionServiceDep,
+    doctor_search: DoctorSearchServiceDep,
+    rag_service: RAGServiceDep,
+    emergency_service: EmergencyServiceDep,
+    llm_service: LLMServiceDep,
+) -> AIChatService:
+    return AIChatService(
+        specialty_detector=specialty_detector,
+        doctor_search=doctor_search,
+        rag_service=rag_service,
+        emergency_service=emergency_service,
+        llm_service=llm_service,
+    )
+
+
+AIChatServiceDep = Annotated[AIChatService, Depends(get_ai_chat_service)]
