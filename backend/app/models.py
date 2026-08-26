@@ -82,7 +82,7 @@ class User(Base):
 
     patient = relationship("Patient", back_populates="user", uselist=False)
     doctor = relationship("Doctor", back_populates="user", uselist=False)
-
+    chat_sessions = relationship("ChatSession", back_populates="user", uselist=True)
 
 class Patient(Base):
     __tablename__ = "patients"
@@ -344,3 +344,31 @@ class Payment(Base):
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
 
     appointment = relationship("Appointment", back_populates="payment")
+
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String(255), nullable=True)
+    created_date = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
+
+    user = relationship("User", back_populates="chat_sessions")
+    messages = relationship(
+        "ChatMessage",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="ChatMessage.created_date"
+    )
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(Integer, ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(20), nullable=False)
+    content = Column(Text, nullable=False)
+    created_date = Column(DateTime, server_default=func.now(), nullable=False)
+
+    session = relationship("ChatSession", back_populates="messages")

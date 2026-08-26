@@ -9,7 +9,17 @@ from app.dependencies.commons import (
     check_doctor,
     get_owned_schedule_slot,
 )
-from app.dependencies.services import *
+from app.dependencies.services import (
+    AIChatServiceDep,
+    AppointmentServiceDep,
+    AuthServiceDep,
+    ChatSessionServiceDep,
+    DoctorServiceDep,
+    PatientServiceDep,
+    PaymentServiceDep,
+    SpecialtyServiceDep,
+    UserServiceDep,
+)
 from app.models import Patient, ScheduleSlot, User, Doctor, Appointment
 from app.schemas import (
     AppointmentCancel,
@@ -34,6 +44,11 @@ from app.schemas import (
     PaymentCreate,
     ChatResponse,
     ChatRequest,
+    SendMessageRequest,
+    SendMessageResponse,
+    ChatMessageOut,
+    ChatSessionOut,
+    ChatSessionCreate,
 )
 
 router = APIRouter(prefix="")
@@ -277,15 +292,67 @@ async def get_payment_detail(
 ):
     return await payment_service.get_payment_detail(payment_id, current_user)
 
-ai_router = APIRouter(prefix="/ai", tags=["Chatbot AI"])
+chat_router = APIRouter(prefix="/chat", tags=["Chatbot AI"])
 
-@ai_router.post("/chat", response_model=ChatResponse)
+@chat_router.post("/ai", response_model=ChatResponse)
 async def chat_with_ai(
     request: ChatRequest,
     ai_chat_service: AIChatServiceDep,
 ):
-    reply = await ai_chat_service.chat(
+    result = await ai_chat_service.chat(
         user_message=request.message,
         chat_history=request.chat_history
     )
-    return ChatResponse(reply=reply)
+    return ChatResponse(**result)
+
+@chat_router.post("/sessions", response_model=ChatSessionOut, status_code=201)
+async def create_chat_session(
+    data: ChatSessionCreate,
+    chat_session_service: ChatSessionServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    return await chat_session_service.create_session(current_user, data.title)
+
+
+@router.get(
+    "/users/me/chat-sessions",
+    response_model=list[ChatSessionOut],
+    tags=["Chatbot Sessions"],
+)
+async def get_my_chat_sessions(
+    chat_session_service: ChatSessionServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    return await chat_session_service.get_user_sessions(current_user)
+
+
+@chat_router.post(
+    "/sessions/{session_id}/messages", response_model=SendMessageResponse, status_code=201
+)
+async def send_chat_message(
+    session_id: int,
+    data: SendMessageRequest,
+    chat_session_service: ChatSessionServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    return await chat_session_service.send_message(
+        session_id, current_user, data.content
+    )
+
+
+@chat_router.get("/sessions/{session_id}/messages", response_model=list[ChatMessageOut])
+async def get_chat_session_messages(
+    session_id: int,
+    chat_session_service: ChatSessionServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    return await chat_session_service.get_session_messages(session_id, current_user)
+
+
+@chat_router.delete("/sessions/{session_id}", status_code=204)
+async def delete_chat_session(
+    session_id: int,
+    chat_session_service: ChatSessionServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    await chat_session_service.delete_session(session_id, current_user)

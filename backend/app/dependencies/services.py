@@ -17,6 +17,8 @@ from app.dependencies.repos import (
     ScheduleSlotRepoDep,
     SpecialtyRepoDep,
     UserRepoDep,
+    ChatSessionRepoDep,
+    ChatMessageRepoDep,
 )
 from app.services import (
     AIChatService,
@@ -34,6 +36,7 @@ from app.services import (
     SpecialtyDetectionService,
     SpecialtyService,
     UserService,
+    ChatSessionService,
 )
 
 
@@ -164,9 +167,17 @@ def get_report_service(
 
 ReportServiceDep = Annotated[ReportService, Depends(get_report_service)]
 
+_rag_service_instance: RAGService | None = None
+_llm_service_instance: LLMService | None = None
+_specialty_detection_service_instance: SpecialtyDetectionService | None = None
+_emergency_service_instance: EmergencyService | None = None
+
 
 def get_specialty_detection_service() -> SpecialtyDetectionService:
-    return SpecialtyDetectionService()
+    global _specialty_detection_service_instance
+    if _specialty_detection_service_instance is None:
+        _specialty_detection_service_instance = SpecialtyDetectionService()
+    return _specialty_detection_service_instance
 
 
 SpecialtyDetectionServiceDep = Annotated[
@@ -175,21 +186,30 @@ SpecialtyDetectionServiceDep = Annotated[
 
 
 def get_rag_service() -> RAGService:
-    return RAGService()
+    global _rag_service_instance
+    if _rag_service_instance is None:
+        _rag_service_instance = RAGService()
+    return _rag_service_instance
 
 
 RAGServiceDep = Annotated[RAGService, Depends(get_rag_service)]
 
 
 def get_emergency_service() -> EmergencyService:
-    return EmergencyService()
+    global _emergency_service_instance
+    if _emergency_service_instance is None:
+        _emergency_service_instance = EmergencyService()
+    return _emergency_service_instance
 
 
 EmergencyServiceDep = Annotated[EmergencyService, Depends(get_emergency_service)]
 
 
 def get_llm_service() -> LLMService:
-    return LLMService()
+    global _llm_service_instance
+    if _llm_service_instance is None:
+        _llm_service_instance = LLMService()
+    return _llm_service_instance
 
 
 LLMServiceDep = Annotated[LLMService, Depends(get_llm_service)]
@@ -223,3 +243,18 @@ def get_ai_chat_service(
 
 
 AIChatServiceDep = Annotated[AIChatService, Depends(get_ai_chat_service)]
+
+def get_chat_session_service(
+    session_repo: ChatSessionRepoDep,
+    message_repo: ChatMessageRepoDep,
+    ai_chat_service: AIChatServiceDep,
+) -> ChatSessionService:
+    return ChatSessionService(
+        session_repo=session_repo,
+        message_repo=message_repo,
+        ai_chat_service=ai_chat_service,
+    )
+
+ChatSessionServiceDep = Annotated[
+    ChatSessionService, Depends(get_chat_session_service)
+]

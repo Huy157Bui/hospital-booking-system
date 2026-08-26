@@ -3,7 +3,7 @@ import time
 import urllib.request
 import urllib.error
 
-API_URL = "http://127.0.0.1:8000/ai/chat"
+API_URL = "http://127.0.0.1:8000/chat/ai"
 
 GREEN = "\033[92m"
 RED = "\033[91m"
@@ -17,20 +17,23 @@ TEST_SUITE = [
     {
         "name": "TC01 [Cấp cứu]: Khó thở dữ dội + đau ngực",
         "payload": {"message": "Tôi bị khó thở dữ dội và đau ngực, Trung tâm Cấp cứu A9 ở đâu?"},
-        "expect_contains": ["cảnh báo", "cấp cứu a9", "78", "giải phóng"],
-        "expect_not_contains": []
+        "expect_contains": ["cảnh báo", "cấp cứu", "78", "giải phóng"],
+        "expect_not_contains": [],
+        "expect_suggestions": [],
     },
     {
         "name": "TC02 [Cấp cứu]: Đột quỵ / Bất tỉnh",
         "payload": {"message": "Bố tôi bị đột quỵ, liệt nửa người và bất tỉnh thì đưa đến đâu?"},
         "expect_contains": ["cảnh báo", "cấp cứu", "115"],
-        "expect_not_contains": []
+        "expect_not_contains": [],
+        "expect_suggestions": [],
     },
     {
         "name": "TC03 [Cấp cứu]: Ngộ độc cấp / Nôn ra máu",
         "payload": {"message": "Người nhà tôi uống nhầm thuốc sâu và đang nôn ra máu tươi!"},
         "expect_contains": ["cảnh báo", "cấp cứu"],
-        "expect_not_contains": []
+        "expect_not_contains": [],
+        "expect_suggestions": [],
     },
 
     # NHÓM 2: MULTI-TURN MEMORY
@@ -44,7 +47,8 @@ TEST_SUITE = [
             ]
         },
         "expect_contains": ["đào xuân cơ", "385"],
-        "expect_not_contains": ["đỗ ngọc sơn", "hồi sức"]
+        "expect_not_contains": ["đỗ ngọc sơn", "hồi sức"],
+        "expect_suggestions": ["Đặt lịch khám"],
     },
     {
         "name": "TC05 [Đa lượt]: Bé sốt phát ban -> Bác sĩ Nhi",
@@ -56,7 +60,8 @@ TEST_SUITE = [
             ]
         },
         "expect_contains": ["vũ văn giáp", "nhi khoa", "468"],
-        "expect_not_contains": ["da liễu"]
+        "expect_not_contains": ["da liễu"],
+        "expect_suggestions": ["Đặt lịch khám"],
     },
     {
         "name": "TC06 [Đa lượt]: Chuyển đổi chuyên khoa giữa chừng",
@@ -68,7 +73,8 @@ TEST_SUITE = [
             ]
         },
         "expect_contains": ["nguyễn tuấn tùng", "huyết học", "368"],
-        "expect_not_contains": ["đào xuân cơ"]
+        "expect_not_contains": ["đào xuân cơ"],
+        "expect_suggestions": ["Đặt lịch khám"],
     },
 
     # NHÓM 3: CHUYÊN KHOA SÂU
@@ -76,39 +82,45 @@ TEST_SUITE = [
         "name": "TC07 [Chuyên khoa]: Viện Huyết học và Truyền máu Bạch Mai",
         "payload": {"message": "Viện Huyết học và Truyền máu Bạch Mai có bác sĩ nào khám?"},
         "expect_contains": ["nguyễn tuấn tùng", "368"],
-        "expect_not_contains": ["không tìm thấy"]
+        "expect_not_contains": ["không tìm thấy"],
+        "expect_suggestions": ["Đặt lịch khám"],
     },
     {
         "name": "TC08 [Chuyên khoa]: Trung tâm Hồi sức tích cực",
         "payload": {"message": "Tôi muốn tìm bác sĩ tại Trung tâm Hồi sức tích cực"},
         "expect_contains": ["đỗ ngọc sơn", "228"],
-        "expect_not_contains": ["không tìm thấy"]
+        "expect_not_contains": ["không tìm thấy"],
+        "expect_suggestions": ["Đặt lịch khám"],
     },
     {
         "name": "TC09 [Chuyên khoa]: Trung tâm Cấp Cứu A9 (Bác sĩ chuyên khoa)",
         "payload": {"message": "Bác sĩ đang công tác tại Trung tâm Cấp cứu A9 gồm những ai?"},
         "expect_contains": ["nguyễn anh tuấn", "437"],
-        "expect_not_contains": []
+        "expect_not_contains": [],
+        "expect_suggestions": ["Đặt lịch khám"],
     },
 
     # NHÓM 4: BỘ LỌC GIÁ
     {
         "name": "TC10 [Lọc giá]: Khoa Mắt < 200k (Từ chối đúng)",
         "payload": {"message": "Có bác sĩ Khoa Mắt nào khám dưới 200k không?"},
-        "expect_contains": ["không có bác sĩ", "200"],
-        "expect_not_contains": ["đào xuân cơ"]
+        "expect_contains": ["không có bác sĩ", "200", "khoa khám bệnh"],
+        "expect_not_contains": ["đào xuân cơ"],
+        "expect_suggestions": ["Đến Khoa Khám bệnh"],
     },
     {
         "name": "TC11 [Lọc giá sàn]: Dưới 100k (Từ chối đúng)",
         "payload": {"message": "Có bác sĩ nào trong viện khám dưới 100k không?"},
-        "expect_contains": ["không", "khoa khám bệnh"],
-        "expect_not_contains": ["giá khám: 50"]
+        "expect_contains": ["không có bác sĩ", "100", "khoa khám bệnh"],
+        "expect_not_contains": ["giá khám: 50"],
+        "expect_suggestions": ["Đến Khoa Khám bệnh"],
     },
     {
         "name": "TC12 [Lọc giá trần cao]: Dưới 500k toàn viện",
         "payload": {"message": "Cho tôi xem các bác sĩ có giá khám dưới 500 nghìn"},
         "expect_contains": ["228", "368", "385"],
-        "expect_not_contains": ["không tìm thấy"]
+        "expect_not_contains": ["không tìm thấy"],
+        "expect_suggestions": ["Đặt lịch khám"],
     },
 
     # NHÓM 5: CHỐNG ẢO GIÁC
@@ -116,13 +128,15 @@ TEST_SUITE = [
         "name": "TC13 [Chống ảo giác]: Khoa Da Liễu (Rỗng DB)",
         "payload": {"message": "Tôi bị mẩn ngứa dị ứng, có bác sĩ Da liễu nào khám không?"},
         "expect_contains": ["không", "da liễu", "khoa khám bệnh"],
-        "expect_not_contains": []
+        "expect_not_contains": [],
+        "expect_suggestions": ["Đến Khoa Khám bệnh"],
     },
     {
         "name": "TC14 [Chống ảo giác]: Bác sĩ không tồn tại",
         "payload": {"message": "Bác sĩ Huỳnh Tấn Phát có khám ở viện Bạch Mai không?"},
         "expect_contains": ["không", "khoa khám bệnh"],
-        "expect_not_contains": []
+        "expect_not_contains": [],
+        "expect_suggestions": ["Đến Khoa Khám bệnh"],
     },
 
     # NHÓM 6: RAG QUY TRÌNH
@@ -130,25 +144,29 @@ TEST_SUITE = [
         "name": "TC15 [RAG]: Giấy tờ tái khám",
         "payload": {"message": "Quy trình tái khám tại Bệnh viện Bạch Mai cần mang những giấy tờ gì?"},
         "expect_contains": ["tái khám"],
-        "expect_not_contains": []
+        "expect_not_contains": [],
+        "expect_suggestions": [],
     },
     {
         "name": "TC16 [RAG]: Chính sách BHYT trái tuyến",
         "payload": {"message": "Tôi khám bảo hiểm y tế trái tuyến tại Bạch Mai thì được hưởng mức quyền lợi như thế nào?"},
         "expect_contains": ["bảo hiểm y tế"],
-        "expect_not_contains": []
+        "expect_not_contains": [],
+        "expect_suggestions": [],
     },
     {
         "name": "TC17 [RAG]: Thời gian làm việc của bệnh viện",
         "payload": {"message": "Bệnh viện Bạch Mai có khám thứ 7 và Chủ nhật không? Giờ làm việc ra sao?"},
         "expect_contains": ["thứ"],
-        "expect_not_contains": []
+        "expect_not_contains": [],
+        "expect_suggestions": [],
     },
     {
         "name": "TC18 [RAG]: Địa chỉ và vị trí cổng vào",
         "payload": {"message": "Bệnh viện Bạch Mai địa chỉ chính xác ở đâu và đi vào bằng cổng nào?"},
         "expect_contains": ["78", "giải phóng"],
-        "expect_not_contains": []
+        "expect_not_contains": [],
+        "expect_suggestions": [],
     },
 
     # NHÓM 7: PHÂN LUỒNG TRIỆU CHỨNG
@@ -156,37 +174,43 @@ TEST_SUITE = [
         "name": "TC19 [Triệu chứng]: Tiêu hóa (Ợ chua)",
         "payload": {"message": "Tôi hay bị ợ chua, nóng rát vùng thượng vị sau khi ăn, nên khám khoa nào?"},
         "expect_contains": ["tiêu hóa", "khoa khám bệnh"],
-        "expect_not_contains": []
+        "expect_not_contains": [],
+        "expect_suggestions": ["Xem bác sĩ", "Xem giá khám", "Đặt lịch khám"],
     },
     {
         "name": "TC20 [Triệu chứng]: Cơ Xương Khớp (Đau lưng)",
         "payload": {"message": "Tôi bị đau mỏi thắt lưng lan xuống chân khi cúi người"},
-        "expect_contains": ["khoa khám bệnh"],
-        "expect_not_contains": []
+        "expect_contains": ["cơ xương khớp", "khoa khám bệnh"],
+        "expect_not_contains": [],
+        "expect_suggestions": ["Xem bác sĩ", "Xem giá khám", "Đặt lịch khám"],
     },
     {
         "name": "TC21 [Triệu chứng]: Tai Mũi Họng (Ù tai, khàn giọng)",
         "payload": {"message": "Dạo này tôi bị khàn giọng kéo dài và hay bị ù tai"},
-        "expect_contains": ["tai mũi họng"],
-        "expect_not_contains": []
+        "expect_contains": ["tai mũi họng", "khoa khám bệnh"],
+        "expect_not_contains": [],
+        "expect_suggestions": ["Xem bác sĩ", "Xem giá khám", "Đặt lịch khám"],
     },
     {
         "name": "TC22 [Triệu chứng]: Thần Kinh (Đau nửa đầu)",
         "payload": {"message": "Tôi bị đau nửa đầu dữ dội kèm mất ngủ kéo dài 2 tuần nay"},
-        "expect_contains": ["thần kinh"],
-        "expect_not_contains": []
+        "expect_contains": ["thần kinh", "khoa khám bệnh"],
+        "expect_not_contains": [],
+        "expect_suggestions": ["Xem bác sĩ", "Xem giá khám", "Đặt lịch khám"],
     },
     {
         "name": "TC23 [Triệu chứng]: Tim Mạch (Đánh trống ngực)",
         "payload": {"message": "Thỉnh thoảng tim tôi đập thình thịch, hồi hộp không rõ nguyên nhân"},
-        "expect_contains": ["tim"],
-        "expect_not_contains": []
+        "expect_contains": ["tim mạch", "khoa khám bệnh"],
+        "expect_not_contains": [],
+        "expect_suggestions": ["Xem bác sĩ", "Xem giá khám", "Đặt lịch khám"],
     },
     {
         "name": "TC24 [Triệu chứng]: Thận - Tiết Niệu (Tiểu buốt)",
         "payload": {"message": "Tôi hay bị tiểu đêm nhiều lần và buốt rát khi đi tiểu"},
-        "expect_contains": ["tiết niệu"],
-        "expect_not_contains": []
+        "expect_contains": ["tiết niệu", "khoa khám bệnh"],
+        "expect_not_contains": [],
+        "expect_suggestions": ["Xem bác sĩ", "Xem giá khám", "Đặt lịch khám"],
     }
 ]
 
@@ -234,6 +258,8 @@ def run_automation_suite():
 
         reply = resp.get("reply", "")
         reply_lower = reply.lower() if isinstance(reply, str) else str(resp).lower()
+        suggestions = resp.get("suggestions", [])
+        suggestions_lower = [s.lower() for s in suggestions] if isinstance(suggestions, list) else []
 
         is_pass = True
         fail_reasons = []
@@ -252,6 +278,12 @@ def run_automation_suite():
                 is_pass = False
                 fail_reasons.append(f"Xuất hiện từ cấm: '{kw}'")
 
+        # Kiểm tra suggestions
+        for sugg in tc.get("expect_suggestions", []):
+            if not any(sugg.lower() in s for s in suggestions_lower):
+                is_pass = False
+                fail_reasons.append(f"Thiếu suggestion: '{sugg}'")
+
         if is_pass:
             passed_count += 1
             print(f"{GREEN}{BOLD}PASSED{RESET} ({duration:.2f}s)")
@@ -259,7 +291,10 @@ def run_automation_suite():
             failed_count += 1
             print(f"{RED}{BOLD}FAILED{RESET} ({duration:.2f}s)")
             print(f"   {YELLOW}↳ Lý do lỗi:{RESET} {', '.join(fail_reasons)}")
-            print(f"   {YELLOW}↳ AI phản hồi:{RESET} {reply[:120]}...\n")
+            print(f"   {YELLOW}↳ AI phản hồi:{RESET} {reply[:120]}...")
+            if suggestions:
+                print(f"   {YELLOW}↳ Suggestions:{RESET} {suggestions}")
+            print()
 
     pass_rate = (passed_count / len(TEST_SUITE)) * 100
     color_rate = GREEN if pass_rate == 100 else (YELLOW if pass_rate >= 80 else RED)

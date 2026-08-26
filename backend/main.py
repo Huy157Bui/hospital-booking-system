@@ -12,9 +12,9 @@ from app.routers import (
     specialties_router,
     appointments_router,
     payments_router,
-    ai_router,
+    chat_router,
 )
-from app.exceptions import BaseException
+from app.exceptions import AppException
 
 
 @asynccontextmanager
@@ -25,8 +25,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-@app.exception_handler(BaseException)
-async def app_exception_handler(request: Request, exc: BaseException):
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException):
     return JSONResponse(
         status_code=exc.status_code,
         content={"message": exc.message},
@@ -40,4 +40,4 @@ app.include_router(doctors_router)
 app.include_router(specialties_router)
 app.include_router(appointments_router)
 app.include_router(payments_router)
-app.include_router(ai_router)
+app.include_router(chat_router)

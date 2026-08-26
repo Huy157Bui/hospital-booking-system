@@ -1,23 +1,38 @@
 import asyncio
+import logging
+import re
+import unicodedata
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-import re
 from typing import Any, Optional
-import unicodedata
 
 import chromadb
 from chromadb.utils import embedding_functions
 from jose import JWTError, jwt
-from langchain.prompts import PromptTemplate
 from langchain_community.chat_models import ChatOllama
 from passlib.context import CryptContext
 from passlib.exc import InvalidTokenError
-from pydantic import BaseModel, Field
-from sqlalchemy import DECIMAL
 
 from app.core import settings
-from app.dependencies.repos import *
+from app.dependencies.repos import (
+    ChatMessageRepoDep,
+    ChatSessionRepoDep,
+    AppointmentRepoDep,
+    DoctorRepoDep,
+    ExaminationRepoDep,
+    MedicalRecordRepoDep,
+    MedicineRepoDep,
+    PatientRepoDep,
+    PaymentRepoDep,
+    PrescriptionDetailRepoDep,
+    PrescriptionRepoDep,
+    ReportRepoDep,
+    ScheduleRepoDep,
+    ScheduleSlotRepoDep,
+    SpecialtyRepoDep,
+    UserRepoDep,
+)
 from app.exceptions import (
     BadRequestException,
     ConflictException,
@@ -25,6 +40,8 @@ from app.exceptions import (
     ResourceNotFound,
 )
 from app.models import (
+    ChatMessage,
+    ChatSession,
     Appointment,
     AppointmentStatus,
     Doctor,
@@ -49,7 +66,6 @@ from app.schemas import (
     AppointmentStatusCount,
     DailyAppointmentSummary,
     DoctorCreate,
-    ExaminationOut,
     ExaminationRecordCreate,
     PatientsBySpecialtyItem,
     PatientsBySpecialtyResponse,
@@ -74,14 +90,11 @@ COLLECTION_NAME = "bachmai_knowledge"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
-
 def verify_password(plain, hashed) -> bool:
     return pwd_context.verify(plain, hashed)
-
 
 def create_access_token(
     data: dict, expires_delta: timedelta | None = None
@@ -94,7 +107,6 @@ def create_access_token(
     return jwt.encode(
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
-
 
 class AuthService:
     def __init__(self, user_repo: UserRepoDep):
@@ -175,7 +187,6 @@ class AuthService:
             return None
         return user
 
-
 class UserService:
     def __init__(self, user_repo: UserRepoDep):
         self.user_repo = user_repo
@@ -237,9 +248,7 @@ class AppointmentService:
             "Chỉ bệnh nhân, bác sĩ hoặc quản trị viên mới được xem lịch hẹn này"
         )
 
-    async def get_user_appointments(
-        self, current_user: User
-    ) -> list[Appointment]:
+    async def get_user_appointments(self, current_user: User) -> list[Appointment]:
         if current_user.role == UserRole.PATIENT:
             return await self.appointment_repo.get_by_patient(current_user.id)
         return await self.appointment_repo.get_by_doctor(current_user.id)
@@ -256,9 +265,7 @@ class AppointmentService:
         if slot.status != ScheduleSlotStatus.AVAILABLE:
             raise BadRequestException("Khung giờ không khả dụng")
 
-        existing = await self.appointment_repo.get_by_slot_id(
-            appointment_data.slot_id
-        )
+        existing = await self.appointment_repo.get_by_slot_id(appointment_data.slot_id)
         if existing is not None:
             raise ConflictException("Khung giờ đã được đặt")
 
@@ -288,13 +295,13 @@ class AppointmentService:
 
         if current_user.role != UserRole.ADMIN:
             if current_user.role != UserRole.PATIENT:
-                raise ForbiddenException("Từ chối truy cập")
+                raise ForbiddenException("Bạn không có quyền hủy lịch hẹn này")
             patient = await self.patient_repo.get_by_user_id(current_user.id)
             if not patient or appointment.patient_id != patient.id:
-                raise ForbiddenException("Từ chối truy cập")
+                raise ForbiddenException("Bạn không có quyền hủy lịch hẹn này")
 
         if appointment.status == AppointmentStatus.CANCELLED:
-            raise ForbiddenException("Từ chối truy cập")
+            raise BadRequestException("Lịch hẹn đã được hủy trước đó")
         if appointment.status == AppointmentStatus.COMPLETED:
             raise BadRequestException("Không thể hủy lịch hẹn đã hoàn thành")
 
@@ -450,12 +457,12 @@ class AppointmentService:
                         examination_id=examination.id,
                         prescription_type=pres_data.prescription_type,
                         note=pres_data.note,
-                        total_amount=DECIMAL(0),
+                        total_amount=Decimal(0),
                         status=0,
                     )
                 )
 
-                total = DECIMAL(0)
+                total = Decimal(0)
                 details = []
                 for item in pres_data.items:
                     medicine = await self.medicine_repo.get_by_id(item.medicine_id)
@@ -491,7 +498,7 @@ class AppointmentService:
         try:
             await repo.refresh(obj)
         except Exception:
-            pass
+            logger.exception("Failed to refresh object of type %s", type(obj).__name__)
 
     async def get_appointment_record(
         self, appointment: Appointment
@@ -547,10 +554,7 @@ class AppointmentService:
             transaction_id=None,
         )
         await self.payment_repo.create(payment)
-        try:
-            await self.payment_repo.refresh(payment)
-        except Exception:
-            pass
+        await self._safe_refresh(self.payment_repo, payment)
 
         appointment.status = AppointmentStatus.PAID
         await self.appointment_repo.update(appointment)
@@ -900,11 +904,6 @@ class ReportService:
             end_date=end_date.date() if end_date else None,
         )
 
-
-# ==========================================
-# AI & CHAT SERVICES
-# ==========================================
-
 RAG_KEYWORDS = [
     "quy trình",
     "thủ tục",
@@ -938,6 +937,17 @@ EMERGENCY_KEYWORDS = [
     "đột quỵ",
     "tai biến",
 ]
+
+DOCTOR_INTENT_KEYWORDS = [
+    "bác sĩ",
+    "giá",
+    "chi phí",
+    "bao nhiêu",
+    "danh sách",
+    "phòng khám",
+]
+
+logger = logging.getLogger(__name__)
 
 VN_CHARS = r"a-z0-9_àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ"
 
@@ -998,6 +1008,11 @@ class SpecialtyDetectionService:
 class RAGService:
     def __init__(self):
         self.collection = None
+        self.embedding_fn = None
+        self.chroma_client = None
+        self._initialize()
+
+    def _initialize(self):
         try:
             self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
                 model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -1006,7 +1021,8 @@ class RAGService:
             self.collection = self.chroma_client.get_collection(
                 name=COLLECTION_NAME, embedding_function=self.embedding_fn
             )
-        except Exception as e:
+        except Exception:
+            logger.exception("Failed to initialize RAG service")
             self.collection = None
 
     def _search_sync(self, query: str, top_k: int = 3) -> str:
@@ -1018,16 +1034,16 @@ class RAGService:
             if not documents:
                 return ""
             return "\n---\n".join(documents)
-        except Exception as e:
+        except Exception:
+            logger.exception("RAG search failed for query: %s", query)
             return ""
 
     async def search(self, query: str) -> str:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._search_sync, query)
 
-
 class DoctorSearchService:
-    def __init__(self, doctor_repo: DoctorRepository):
+    def __init__(self, doctor_repo: DoctorRepoDep):
         self.doctor_repo = doctor_repo
 
     async def search(
@@ -1095,21 +1111,34 @@ class EmergencyService:
             "⚠️ *Gia đình vui lòng đưa người bệnh đến thẳng Trung tâm Cấp cứu A9, không chờ đợi đặt lịch trực tuyến.*"
         )
 
-
 class LLMService:
     def __init__(self):
-        self.llm = ChatOllama(
-            model=settings.OLLAMA_MODEL,
-            base_url=settings.OLLAMA_BASE_URL,
-            temperature=0.1,
-            stop=["<|im_end|>", "<|endoftext|>", "User:", "Human:"],
-        )
+        self.llm = None
+        self._initialize()
+
+    def _initialize(self):
+        try:
+            self.llm = ChatOllama(
+                model=settings.OLLAMA_MODEL,
+                base_url=settings.OLLAMA_BASE_URL,
+                temperature=0.1,
+                stop=["<|im_end|>", "<|endoftext|>", "User:", "Human:"],
+            )
+        except Exception:
+            logger.exception("Failed to initialize LLM service")
+            self.llm = None
 
     async def generate(self, prompt: str) -> str:
+        if not self.llm:
+            return (
+                "Xin chào, tôi là trợ lý ảo Bệnh viện Bạch Mai. "
+                "Hiện tại hệ thống AI đang bận xử lý, vui lòng liên hệ hotline 1900 888 866 hoặc đến trực tiếp 78 Giải Phóng, Hà Nội để được hỗ trợ tốt nhất."
+            )
         try:
             response = await self.llm.ainvoke(prompt)
             return response.content if hasattr(response, "content") else str(response)
-        except Exception as e:
+        except Exception:
+            logger.exception("LLM generate failed")
             return (
                 "Xin chào, tôi là trợ lý ảo Bệnh viện Bạch Mai. "
                 "Hiện tại hệ thống AI đang bận xử lý, vui lòng liên hệ hotline 1900 888 866 hoặc đến trực tiếp 78 Giải Phóng, Hà Nội để được hỗ trợ tốt nhất."
@@ -1142,45 +1171,27 @@ class AIChatService:
         self.llm_service = llm_service
 
     def _resolve_specialty(
-        self, user_message: str, chat_history: list[Any] | None
+            self, user_message: str, chat_history: list[Any] | None
     ) -> Optional[str]:
+        # 1. Thử detect từ câu hiện tại
         specialty = self.specialty_detector.detect(user_message)
         if specialty or not chat_history:
             return specialty
 
+        # 2. Dò ngược chat_history tìm specialty
         for turn in reversed(chat_history):
             content = self._extract_turn_content(turn)
             inherited = self.specialty_detector.detect(content)
             if inherited:
                 return inherited
 
+        # 3. Fallback rules
         for turn in reversed(chat_history):
             text_lower = self._extract_turn_content(turn).lower()
             for spec, kws in self.FALLBACK_SPECIALTY_RULES.items():
                 if any(kw in text_lower for kw in kws):
                     return spec
         return None
-
-    def _build_not_found_message(
-        self,
-        specialty: Optional[str],
-        max_fee: Optional[float],
-        doctor_name: Optional[str],
-    ) -> str:
-        if doctor_name:
-            reason = f"Không tìm thấy bác sĩ '{doctor_name}' trong hệ thống của Bệnh viện Bạch Mai."
-        elif specialty and max_fee:
-            reason = f"Hiện không có bác sĩ nào thuộc chuyên khoa '{specialty}' có giá khám dưới {max_fee:,.0f} VNĐ."
-        elif specialty:
-            reason = f"Không tìm thấy bác sĩ nào thuộc chuyên khoa '{specialty}' trong cơ sở dữ liệu."
-        elif max_fee:
-            reason = f"Hiện không có bác sĩ nào có giá khám dưới {max_fee:,.0f} VNĐ."
-        else:
-            reason = "Không tìm thấy bác sĩ phù hợp với yêu cầu của bạn."
-        return (
-            f"{reason} Tôi khuyên bạn nên đến Khoa Khám bệnh (78 Giải Phóng, Hà Nội) "
-            f"để đăng ký khám theo diện BHYT hoặc khám thông thường."
-        )
 
     def _extract_turn_content(self, msg: Any) -> str:
         if isinstance(msg, dict):
@@ -1211,6 +1222,7 @@ class AIChatService:
                     val *= 1000000
                 return val
             except Exception:
+                logger.exception("Failed to parse fee from text: %s", text)
                 pass
 
         match_prefix = re.search(r"(dưới|tầm|khoảng|giá|mức)\s+(\d{2,6})", text_lower)
@@ -1221,6 +1233,7 @@ class AIChatService:
                     val *= 1000
                 return val
             except Exception:
+                logger.exception("Failed to parse fee prefix from text: %s", text)
                 pass
         return None
 
@@ -1232,17 +1245,35 @@ class AIChatService:
         match = re.search(prefix_pattern, text_norm, re.IGNORECASE)
         if match:
             raw_name = match.group(1).strip()
-            stop_words = r"\b(có|ở|tại|làm việc|khám|không|tư vấn|cho|nào|được|\?|,|\.)\b"
+            stop_words = (
+                r"\b(có|ở|tại|làm việc|khám|không|tư vấn|cho|nào|được|\?|,|\.)\b"
+            )
             clean_name = re.split(stop_words, raw_name, flags=re.IGNORECASE)[0].strip()
             invalid_starts = [
-                "cho", "nào", "tư vấn", "hãy", "giúp", "trực", "khoa",
-                "bệnh viện", "trung tâm", "đang", "công tác", "làm việc",
-                "phụ trách", "chữa", "khám"
+                "cho",
+                "nào",
+                "tư vấn",
+                "hãy",
+                "giúp",
+                "trực",
+                "khoa",
+                "bệnh viện",
+                "trung tâm",
+                "đang",
+                "công tác",
+                "làm việc",
+                "phụ trách",
+                "chữa",
+                "khám",
             ]
             words = clean_name.split()
             if not words or words[0].lower() in invalid_starts:
                 return None
-            if len(words) >= 2 and words[1].lower() in ["công tác", "làm việc", "phụ trách"]:
+            if len(words) >= 2 and words[1].lower() in [
+                "công tác",
+                "làm việc",
+                "phụ trách",
+            ]:
                 return None
             if 2 <= len(words) <= 5:
                 if not any(
@@ -1261,16 +1292,40 @@ class AIChatService:
             name = doc.user.full_name if doc.user else f"Bác sĩ ID {doc.id}"
             degree = doc.degree or "Bác sĩ"
             fee = float(doc.consultation_fee) if doc.consultation_fee else 0.0
-            lines.append(f"- {degree} {name} | Chuyên khoa: {s_name} | Giá khám: {fee:,.0f} VNĐ")
-        lines.append("\nBạn có thể đặt lịch khám trực tiếp qua hệ thống.")
+            lines.append(
+                f"- {degree} {name} | Chuyên khoa: {s_name} | Giá khám: {fee:,.0f} VNĐ"
+            )
         return "\n".join(lines)
+
+    def _build_not_found_message(
+        self,
+        specialty: Optional[str],
+        max_fee: Optional[float],
+        doctor_name: Optional[str],
+    ) -> str:
+        if doctor_name:
+            reason = f"Không tìm thấy bác sĩ '{doctor_name}' trong hệ thống của Bệnh viện Bạch Mai."
+        elif specialty and max_fee:
+            reason = f"Hiện không có bác sĩ nào thuộc chuyên khoa '{specialty}' có giá khám dưới {max_fee:,.0f} VNĐ."
+        elif specialty:
+            reason = f"Không tìm thấy bác sĩ nào thuộc chuyên khoa '{specialty}' trong cơ sở dữ liệu."
+        elif max_fee:
+            reason = f"Hiện không có bác sĩ nào có giá khám dưới {max_fee:,.0f} VNĐ."
+        else:
+            reason = "Không tìm thấy bác sĩ phù hợp với yêu cầu của bạn."
+        return (
+            f"{reason} Bạn nên đến Khoa Khám bệnh (78 Giải Phóng, Hà Nội) "
+            f"để đăng ký khám theo diện BHYT hoặc khám thông thường."
+        )
 
     def _build_rag_prompt(
         self, user_message: str, context_rag: str, chat_history: list[Any] | None
     ) -> str:
         history_text = ""
         if chat_history:
-            history_text = "\n".join([f"- {self._extract_turn_content(msg)}" for msg in chat_history[-4:]])
+            history_text = "\n".join(
+                [f"- {self._extract_turn_content(msg)}" for msg in chat_history[-4:]]
+            )
 
         return f"""Bạn là Trợ lý AI Bệnh viện Bạch Mai (78 Giải Phóng, Hà Nội).
 BẮT BUỘC 100% TRẢ LỜI BẰNG TIẾNG VIỆT.
@@ -1285,29 +1340,40 @@ Hãy trả lời câu hỏi: "{user_message}" một cách ân cần, ngắn gọ
 
     async def chat(
         self, user_message: str, chat_history: list[Any] | None = None
-    ) -> str:
+    ) -> dict:
         msg_lower = user_message.lower()
 
+        # 1. Emergency check
         if self.emergency_service.check(msg_lower):
-            return self.emergency_service.get_response()
+            return {
+                "reply": self.emergency_service.get_response(),
+                "suggestions": [],
+            }
 
+        # 2. Extract intents
         specialty = self._resolve_specialty(user_message, chat_history)
         max_fee = self._extract_max_fee(user_message)
         doctor_name = self._extract_doctor_name(user_message)
 
+        # 3. RAG query check
         is_rag_query = any(k in msg_lower for k in RAG_KEYWORDS)
-        context_rag = await self.rag_service.search(user_message) if is_rag_query else ""
-
-        doctor_query_intent = bool(
-            specialty
-            or max_fee
-            or doctor_name
-            or any(k in msg_lower for k in ["bác sĩ", "giá", "chi phí", "bao nhiêu"])
+        context_rag = (
+            await self.rag_service.search(user_message) if is_rag_query else ""
         )
-        if is_rag_query and not (specialty or max_fee or doctor_name):
+
+        # 4. Doctor intent check (chỉ dựa trên msg_lower hiện tại)
+        has_explicit_doctor_intent = any(k in msg_lower for k in DOCTOR_INTENT_KEYWORDS)
+
+        # Chỉ set doctor_query_intent khi người dùng hỏi rõ về bác sĩ/giá
+        doctor_query_intent = bool(
+            max_fee or doctor_name or (specialty and has_explicit_doctor_intent)
+        )
+
+        # Nếu là RAG query thuần túy (không có ý định tìm bác sĩ)
+        if is_rag_query and not (max_fee or doctor_name or has_explicit_doctor_intent):
             doctor_query_intent = False
 
-        doctors, found = [], False
+        # 5. Xử lý theo intent
         if doctor_query_intent:
             doctors, found = await self.doctor_search.search(
                 specialty_name=specialty,
@@ -1315,10 +1381,131 @@ Hãy trả lời câu hỏi: "{user_message}" một cách ân cần, ngắn gọ
                 doctor_name=doctor_name,
             )
 
-        if found:
-            return self._format_doctors_response(doctors)
-        elif doctor_query_intent:
-            return self._build_not_found_message(specialty, max_fee, doctor_name)
-        else:
-            prompt = self._build_rag_prompt(user_message, context_rag, chat_history)
-            return await self.llm_service.generate(prompt)
+            if found:
+                reply = self._format_doctors_response(doctors)
+                return {
+                    "reply": reply,
+                    "suggestions": [
+                        "Đặt lịch khám",
+                        "Xem chi tiết bác sĩ",
+                        "Tìm bác sĩ khác",
+                    ],
+                }
+            else:
+                reply = self._build_not_found_message(specialty, max_fee, doctor_name)
+                return {
+                    "reply": reply,
+                    "suggestions": [
+                        "Đến Khoa Khám bệnh",
+                        "Xem quy trình khám",
+                        "Tư vấn chuyên khoa khác",
+                    ],
+                }
+
+        # 6. Triệu chứng thuần túy → tư vấn chuyên khoa
+        if specialty and not has_explicit_doctor_intent:
+            reply = f"Với triệu chứng bạn mô tả, bạn nên đến {specialty} để được khám và tư vấn.\n"
+            reply += "Bạn có thể đến Khoa Khám bệnh (78 Giải Phóng, Hà Nội) để được hướng dẫn chi tiết."
+            return {
+                "reply": reply,
+                "suggestions": [
+                    f"Xem bác sĩ {specialty}",
+                    f"Xem giá khám {specialty}",
+                    "Đặt lịch khám",
+                    "Xem quy trình khám bệnh",
+                ],
+            }
+
+        # 7. Fallback: dùng LLM + RAG
+        prompt = self._build_rag_prompt(user_message, context_rag, chat_history)
+        reply = await self.llm_service.generate(prompt)
+        return {
+            "reply": reply,
+            "suggestions": [
+                "Đặt lịch khám",
+                "Xem quy trình khám bệnh",
+                "Liên hệ hotline",
+            ],
+        }
+class ChatSessionService:
+    def __init__(
+        self,
+        session_repo: ChatSessionRepoDep,
+        message_repo: ChatMessageRepoDep,
+        ai_chat_service: "AIChatService",
+    ) -> None:
+        self.session_repo = session_repo
+        self.message_repo = message_repo
+        self.ai_chat_service = ai_chat_service
+
+    async def create_session(
+        self, current_user: User, title: str | None = None
+    ) -> ChatSession:
+        session = ChatSession(
+            user_id=current_user.id,
+            title=title or "Cuộc trò chuyện mới"
+        )
+        return await self.session_repo.create(session)
+
+    async def get_user_sessions(self, current_user: User) -> list[ChatSession]:
+        return await self.session_repo.get_by_user(current_user.id)
+
+    async def get_owned_session(
+        self, session_id: int, current_user: User
+    ) -> ChatSession:
+        session = await self.session_repo.get_by_id(session_id)
+        if session is None:
+            raise ResourceNotFound("Không tìm thấy phiên chat")
+        if session.user_id != current_user.id and current_user.role != UserRole.ADMIN:
+            raise ForbiddenException("Bạn không có quyền truy cập phiên chat này")
+        return session
+
+    async def send_message(
+        self, session_id: int, current_user: User, content: str
+    ) -> dict:
+        session = await self.get_owned_session(session_id, current_user)
+
+        # Lấy lịch sử chat
+        history = await self.message_repo.get_by_session(session_id)
+        chat_history = [{"role": m.role, "content": m.content} for m in history]
+
+        # Lưu tin nhắn user
+        user_message = await self.message_repo.create(
+            ChatMessage(session_id=session.id, role="user", content=content)
+        )
+
+        # Gọi AI service
+        result = await self.ai_chat_service.chat(
+            user_message=content, chat_history=chat_history
+        )
+
+        # Lưu tin nhắn assistant
+        assistant_message = await self.message_repo.create(
+            ChatMessage(
+                session_id=session.id,
+                role="assistant",
+                content=result["reply"]
+            )
+        )
+
+        # Cập nhật session
+        session.updated_date = datetime.now()
+        if session.title is None or session.title == "Cuộc trò chuyện mới":
+            session.title = content[:50]
+        await self.session_repo.update(session)
+
+        return {
+            "user_message": user_message,
+            "assistant_message": assistant_message,
+            "suggestions": result.get("suggestions", []),
+        }
+
+    async def get_session_messages(
+        self, session_id: int, current_user: User
+    ) -> list[ChatMessage]:
+        await self.get_owned_session(session_id, current_user)
+        return await self.message_repo.get_by_session(session_id)
+
+    async def delete_session(self, session_id: int, current_user: User) -> None:
+        session = await self.get_owned_session(session_id, current_user)
+        await self.session_repo.delete(session.id)

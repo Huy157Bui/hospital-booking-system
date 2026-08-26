@@ -25,6 +25,8 @@ from app.models import (
     User,
     SpecialtyStatus,
     PaymentStatus,
+    ChatSession,
+    ChatMessage,
 )
 
 ModelType = TypeVar("ModelType", bound=Base)
@@ -806,3 +808,28 @@ class ReportRepository(BaseRepository[Appointment]):
             "status_counts": status_counts,
             "daily_rows": daily_rows
         }
+
+class ChatSessionRepository(BaseRepository[ChatSession]):
+    def __init__(self, db: AsyncSession) -> None:
+        super().__init__(ChatSession, db)
+
+    async def get_by_user(self, user_id: int) -> list[ChatSession]:
+        result = await self.db.execute(
+            select(ChatSession)
+            .where(ChatSession.user_id == user_id)
+            .order_by(ChatSession.updated_date.desc())
+        )
+        return list(result.scalars().all())
+
+
+class ChatMessageRepository(BaseRepository[ChatMessage]):
+    def __init__(self, db: AsyncSession) -> None:
+        super().__init__(ChatMessage, db)
+
+    async def get_by_session(self, session_id: int) -> list[ChatMessage]:
+        result = await self.db.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_date.asc())
+        )
+        return list(result.scalars().all())

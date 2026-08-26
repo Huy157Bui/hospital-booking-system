@@ -18,6 +18,8 @@ from app.repositories import (
     ScheduleSlotRepository,
     SpecialtyRepository,
     UserRepository,
+    ChatSessionRepository,
+    ChatMessageRepository,
 )
 
 
@@ -144,4 +146,18 @@ def get_report_repository(db: DbDep) -> ReportRepository:
 
 ReportRepoDep = Annotated[
     ReportRepository, Depends(get_report_repository)
+]
+
+def get_chat_session_repository(db: DbDep) -> ChatSessionRepository:
+    return ChatSessionRepository(db)
+
+ChatSessionRepoDep = Annotated[
+    ChatSessionRepository, Depends(get_chat_session_repository)
+]
+
+def get_chat_message_repository(db: DbDep) -> ChatMessageRepository:
+    return ChatMessageRepository(db)
+
+ChatMessageRepoDep = Annotated[
+    ChatMessageRepository, Depends(get_chat_message_repository)
 ]

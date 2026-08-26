@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Optional, Any
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -152,7 +154,7 @@ class DoctorOut(DoctorBase):
     created_date: datetime
     updated_date: datetime | None = None
     user: UserOut | None = None
-    specialty: Optional["SpecialtyOut"] = None
+    specialty: SpecialtyOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -242,7 +244,7 @@ class ScheduleOut(ScheduleBase):
     id: int
     created_date: datetime
     updated_date: datetime | None = None
-    doctor: Optional["DoctorOut"] = None
+    doctor: DoctorOut | None = None
     slots: list["ScheduleSlotOut"] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
@@ -280,8 +282,8 @@ class AppointmentOut(AppointmentBase):
     status: AppointmentStatus
     booked_at: datetime
     created_date: datetime
-    patient: Optional["PatientOut"] = None
-    slot: Optional["ScheduleSlotOut"] = None
+    patient: PatientOut | None = None
+    slot: ScheduleSlotOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -452,7 +454,7 @@ class PrescriptionDetailOut(PrescriptionDetailBase):
     id: int
     unit_price: Decimal
     subtotal: Decimal
-    medicine: Optional["MedicineOut"] = None
+    medicine: MedicineOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -576,6 +578,36 @@ class RevenueResponse(BaseModel):
     total_transactions: int = Field(..., description="Số giao dịch thành công")
     items: list[RevenueItem] = Field(..., description="Chi tiết các giao dịch")
 
+class ChatSessionCreate(BaseModel):
+    title: str | None = None
+
+
+class ChatSessionOut(BaseModel):
+    id: int
+    title: str | None = None
+    created_date: datetime
+    updated_date: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ChatMessageOut(BaseModel):
+    id: int
+    role: str
+    content: str
+    created_date: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SendMessageRequest(BaseModel):
+    content: str
+
+
+class SendMessageResponse(BaseModel):
+    user_message: ChatMessageOut
+    assistant_message: ChatMessageOut
+    suggestions: list[str] = []
 
 class ChatRequest(BaseModel):
     message: str = Field(
@@ -583,7 +615,7 @@ class ChatRequest(BaseModel):
         min_length=1,
         examples=["Tôi bị đau ngực mất ngủ thì nên khám bác sĩ nào ở Bạch Mai?"],
     )
-    chat_history: Optional[list[Any]] = Field(
+    chat_history: list[Any] | None = Field(
         default=None,
         description="Lịch sử hội thoại (danh sách các tin nhắn)"
     )
@@ -591,6 +623,10 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+    suggestions: list[str] = Field(
+        default_factory=list,
+        description="Danh sách gợi ý cho người dùng lựa chọn"
+    )
     status: str = "success"
 
 
