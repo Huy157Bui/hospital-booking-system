@@ -16,7 +16,6 @@ logging.basicConfig(
 API_URL = "https://apicms.bachmai.gov.vn/api/Departments/list?language=vi"
 PAYLOAD = {"maxResultCount": 100, "skipCount": 0}
 
-# Danh sách từ khóa khẩu hiệu / quảng cáo không phải Khoa/Phòng
 JUNK_KEYWORDS = [
     "hiệu quả điều trị",
     "tra cứu kết quả",
@@ -76,7 +75,6 @@ def main():
         if not name:
             continue
 
-        # Lọc bỏ các khẩu hiệu quảng cáo
         if any(junk in name.lower() for junk in JUNK_KEYWORDS):
             continue
 

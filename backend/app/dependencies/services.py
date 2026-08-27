@@ -19,6 +19,7 @@ from app.dependencies.repos import (
     UserRepoDep,
     ChatSessionRepoDep,
     ChatMessageRepoDep,
+    RefreshTokenRepoDep
 )
 from app.services import (
     AIChatService,
@@ -72,8 +73,8 @@ AppointmentServiceDep = Annotated[
 ]
 
 
-def get_auth_service(user_repo: UserRepoDep) -> AuthService:
-    return AuthService(user_repo=user_repo)
+def get_auth_service(user_repo: UserRepoDep, refresh_token_repo: RefreshTokenRepoDep) -> AuthService:
+    return AuthService(user_repo, refresh_token_repo)
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]

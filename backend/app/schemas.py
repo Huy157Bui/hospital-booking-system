@@ -49,6 +49,19 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
     password: str | None = None
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str = Field(min_length=6)
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
+class TokenRefreshResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
 
 class UserOut(BaseModel):
     id: int
@@ -73,6 +86,7 @@ class LoginRequest(BaseModel):
 
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserOut
 
@@ -629,6 +643,19 @@ class ChatResponse(BaseModel):
     )
     status: str = "success"
 
+class DoctorAvailabilityOut(BaseModel):
+    doctor_id: int
+    doctor_name: str
+    specialty: str
+    work_date: date
+    available_slots: list[ScheduleSlotOut]
+
+    class Config:
+        from_attributes = True
+
+class AppointmentAvailabilityQuery(BaseModel):
+    doctor_id: int
+    date: date
 
 DoctorOut.model_rebuild()
 DoctorScheduleOut.model_rebuild()

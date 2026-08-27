@@ -36,7 +36,6 @@ def parse_bachmai_unit_html(html_content: str, url: str) -> dict:
     }
 
     try:
-        # 1. Địa chỉ, Điện thoại, Website từ <section id="gioi-thieu">
         intro_section = soup.find("section", id="gioi-thieu")
         if intro_section:
             info_box = intro_section.find("div", class_="department-content-box")
@@ -57,7 +56,6 @@ def parse_bachmai_unit_html(html_content: str, url: str) -> dict:
                             else text.replace("Website:", "").strip()
                         )
 
-        # 2. Ban lãnh đạo từ <section id="ban-lanh-dao">
         leadership_section = soup.find("section", id="ban-lanh-dao")
         if leadership_section:
             slides = leadership_section.find_all("div", class_="swiper-slide")
@@ -80,7 +78,6 @@ def parse_bachmai_unit_html(html_content: str, url: str) -> dict:
                         }
                     )
 
-        # 3. Bài viết chi tiết từ <div class="content-editor">
         content_editor = soup.find("div", class_="content-editor")
         if content_editor:
             result["content_detail_text"] = content_editor.get_text(
@@ -132,12 +129,10 @@ def main():
         detailed_units.append(merged_record)
         time.sleep(1.0)
 
-    # Lưu JSON
     with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
         json.dump(detailed_units, f, ensure_ascii=False, indent=2)
     logging.info(f"✅ Đã lưu JSON tại: {OUTPUT_JSON}")
 
-    # Lưu Excel
     excel_list = []
     for u in detailed_units:
         dt = u.get("Chi tiết", {})

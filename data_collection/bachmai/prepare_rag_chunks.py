@@ -71,7 +71,6 @@ def main():
         website = detail_data.get("website", "")
         leadership = detail_data.get("leadership", [])
 
-        # Bỏ qua các đơn vị không có nội dung văn bản
         if not text_content and not address and not leadership:
             continue
 

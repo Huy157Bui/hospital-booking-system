@@ -4,7 +4,6 @@ import logging
 import warnings
 from pathlib import Path
 
-# 1. Chặn toàn bộ cảnh báo và log phụ từ HuggingFace & PyTorch
 warnings.filterwarnings("ignore")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
@@ -20,7 +19,6 @@ for logger_name in [
 import chromadb
 from chromadb.utils import embedding_functions
 
-# 2. Cấu hình định dạng log văn bản chuẩn
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s", datefmt="%H:%M:%S")
 logger = logging.getLogger(__name__)
 
@@ -50,7 +48,6 @@ def seed_rag_vector_db():
         model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     )
 
-    # Don dep collection cu neu co
     try:
         chroma_client.delete_collection(COLLECTION_NAME)
     except Exception:
@@ -84,7 +81,6 @@ def seed_rag_vector_db():
     total_items = len(ids)
     logger.info(f"Dang tao Vector Embedding cho {total_items} chunks...")
 
-    # Nap du lieu
     collection.upsert(documents=documents, metadatas=metadatas, ids=ids)
 
     print("="*55)

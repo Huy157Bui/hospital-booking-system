@@ -20,6 +20,7 @@ from app.repositories import (
     UserRepository,
     ChatSessionRepository,
     ChatMessageRepository,
+    RefreshTokenRepository,
 )
 
 
@@ -58,6 +59,10 @@ UserRepoDep = Annotated[
     UserRepository, Depends(get_user_repository)
 ]
 
+async def get_refresh_token_repository(db: DbDep) -> RefreshTokenRepository:
+    return RefreshTokenRepository(db)
+
+RefreshTokenRepoDep = Annotated[RefreshTokenRepository, Depends(get_refresh_token_repository)]
 
 def get_patient_repository(db: DbDep) -> PatientRepository:
     return PatientRepository(db)

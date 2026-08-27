@@ -7,31 +7,26 @@ import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 
-# Cấu hình Logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - [%(levelname)s] - %(message)s"
 )
 
-# Định vị đường dẫn tuyệt đối chuẩn theo thư mục gốc dự án
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 OUTPUT_DIR = BASE_DIR / "dataset" / "bachmai" / "raw"
 JSON_OUTPUT_PATH = OUTPUT_DIR / "bachmai_bac_si.json"
 EXCEL_OUTPUT_PATH = OUTPUT_DIR / "bachmai_bac_si.xlsx"
 
-# API & Domain
 BASE_URL = "https://apicms.bachmai.gov.vn/api/Doctors"
 DOMAIN_IMAGE_BASE = "https://apicms.bachmai.gov.vn"
 
 
 def safe_str(val):
-    """Hàm ép kiểu chuỗi an toàn, tránh lỗi NoneType khi .strip()"""
     if val is None:
         return ""
     return str(val).strip()
 
 
 def clean_html(html_content):
-    """Hàm làm sạch HTML, chuyển đổi thành văn bản thuần"""
     if not html_content:
         return ""
     soup = BeautifulSoup(html_content, "html.parser")
@@ -47,7 +42,7 @@ def fetch_all_doctors():
 
     doctors_list = []
     skip_count = 0
-    max_result_count = 100  # Lấy 100 bác sĩ/lần
+    max_result_count = 100
     total_count = None
 
     logging.info("🚀 Bắt đầu quá trình thu thập danh sách Bác sĩ Bệnh viện Bạch Mai...")
@@ -79,7 +74,6 @@ def fetch_all_doctors():
                 break
 
             for item in items:
-                # Xử lý đường dẫn ảnh đại diện
                 avatar_obj = item.get("avatar") or {}
                 avatar_relative_url = avatar_obj.get("url", "")
                 avatar_full_url = (
@@ -134,15 +128,12 @@ def save_dataset(doctors):
         logging.warning("⚠️ Không có dữ liệu để lưu!")
         return
 
-    # Tự động tạo thư mục dataset/bachmai/raw ở gốc dự án nếu chưa có
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 1. Lưu file JSON
     with open(JSON_OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(doctors, f, ensure_ascii=False, indent=4)
     logging.info(f"💾 Đã lưu file JSON chuẩn tại: {JSON_OUTPUT_PATH}")
 
-    # 2. Lưu file Excel
     df = pd.DataFrame(doctors)
     df_excel = df.drop(
         columns=["train_html", "strengths_html"], errors="ignore"

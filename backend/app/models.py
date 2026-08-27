@@ -1,4 +1,5 @@
 import enum
+from uuid import uuid4
 
 from sqlalchemy import (
     Text,
@@ -83,6 +84,7 @@ class User(Base):
     patient = relationship("Patient", back_populates="user", uselist=False)
     doctor = relationship("Doctor", back_populates="user", uselist=False)
     chat_sessions = relationship("ChatSession", back_populates="user", uselist=True)
+    refresh_tokens = relationship("RefreshToken", back_populates="user", uselist=True)
 
 class Patient(Base):
     __tablename__ = "patients"
@@ -372,3 +374,14 @@ class ChatMessage(Base):
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
 
     session = relationship("ChatSession", back_populates="messages")
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4.uuid4()))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    revoked = Column(Boolean, default=False, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_date = Column(DateTime, server_default=func.now(), nullable=False)
+
+    user = relationship("User", back_populates="refresh_tokens")

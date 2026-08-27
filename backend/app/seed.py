@@ -8,7 +8,6 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-# Thêm thư mục backend vào sys.path để tránh lỗi Import
 backend_dir = Path(__file__).resolve().parent.parent
 if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
@@ -78,7 +77,6 @@ async def seed():
 
         password = hash_password("123456")
 
-        # ---------- 1. Seed Specialties THẬT từ bachmai_don_vi_sach.json ----------
         print("🏥 Đang nạp 55 Khoa/Phòng thật từ Bạch Mai...")
         units_file = RAW_DIR / "bachmai_don_vi_sach.json"
         with open(units_file, "r", encoding="utf-8") as f:
@@ -130,7 +128,6 @@ async def seed():
 
         print(f"✅ Đã tạo thành công {len(all_specialty_ids)} Khoa/Phòng!")
 
-        # ---------- 2. Seed Admin User ----------
         admin = User(
             full_name="Admin System",
             username="admin",
@@ -144,7 +141,6 @@ async def seed():
         db.add(admin)
         await db.flush()
 
-        # ---------- 3. Seed Doctors THẬT từ bachmai_bac_si.json ----------
         print("👨‍⚕️ Đang nạp 626 Bác sĩ thật từ Bạch Mai...")
         doctors_file = RAW_DIR / "bachmai_bac_si.json"
         with open(doctors_file, "r", encoding="utf-8") as f:
@@ -210,7 +206,6 @@ async def seed():
         await db.flush()
         print(f"✅ Đã tạo thành công {len(doctors)} Bác sĩ!")
 
-        # ---------- 4. Seed Patients & Users Bệnh nhân ----------
         print("👤 Đang tạo dữ liệu Bệnh nhân mẫu...")
         patient_names = [
             "Phạm Văn D", "Hoàng Thị E", "Đặng Văn F", "Ngô Thị G",
@@ -250,7 +245,6 @@ async def seed():
             patients.append(pat)
         await db.flush()
 
-        # ---------- 5. Medical Records ----------
         medical_records = []
         for pat in patients:
             rec = MedicalRecord(
@@ -265,7 +259,6 @@ async def seed():
             medical_records.append(rec)
         await db.flush()
 
-        # ---------- 6. Medicines ----------
         medicine_data = [
             {"name": "Paracetamol 500mg", "code": "MED001", "unit": "Viên", "current_price": Decimal("1500"), "stock_quantity": 100, "status": "active"},
             {"name": "Amoxicillin 500mg", "code": "MED002", "unit": "Viên", "current_price": Decimal("2500"), "stock_quantity": 80, "status": "active"},
@@ -278,7 +271,6 @@ async def seed():
             db.add(Medicine(**md))
         await db.flush()
 
-        # ---------- 7. Schedules & Slots Quá khứ & Tương lai ----------
         print("📅 Đang sinh Lịch làm việc và Ca khám cho các Bác sĩ...")
         today = date.today()
         past_dates = [today - timedelta(days=i) for i in range(15, 0, -1)]
@@ -303,7 +295,6 @@ async def seed():
                 for start_t, end_t in slot_times:
                     slot = ScheduleSlot(schedule_id=sched.id, start_time=start_t, end_time=end_t, status=ScheduleSlotStatus.AVAILABLE)
                     db.add(slot)
-                    # FIX: Lưu trực tiếp work_date và doctor_id vào Dict để tránh Lazy Loading
                     past_slots_info.append({
                         "slot": slot,
                         "work_date": d,
@@ -311,7 +302,6 @@ async def seed():
                     })
         await db.flush()
 
-        # ---------- 8. Appointments Quá khứ ----------
         print("📋 Đang tạo Hồ sơ khám bệnh và Lịch hẹn mẫu...")
         past_appointments_info = []
         for pat in patients:
@@ -381,7 +371,6 @@ async def seed():
                 )
                 db.add(payment)
 
-        # ---------- 9. Tương lai Schedules & Slots ----------
         for doc in sample_doctors:
             for d in future_dates:
                 sched = Schedule(doctor_id=doc.id, work_date=d, status=ScheduleStatus.OPEN)

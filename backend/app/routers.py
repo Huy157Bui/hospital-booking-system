@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
-
+from datetime import date
+from fastapi import APIRouter, Depends
 
 from app.dependencies.commons import (
     get_current_user,
@@ -49,31 +49,61 @@ from app.schemas import (
     ChatMessageOut,
     ChatSessionOut,
     ChatSessionCreate,
+    ChangePasswordRequest,
+    UserUpdate,
+    RefreshTokenRequest,
+    TokenRefreshResponse,
+    DoctorAvailabilityOut,
 )
 
-router = APIRouter(prefix="")
+auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post(
-    "/register", tags=["Authentication"], response_model=UserOut, status_code=201
-)
+@auth_router.post("/register", response_model=UserOut, status_code=201)
 async def register(user_data: UserCreate, auth_service: AuthServiceDep):
     return await auth_service.register(user_data)
 
 
-@router.post("/login", tags=["Authentication"], response_model=Token)
+@auth_router.post("/login", response_model=Token)
 async def login(login_data: LoginRequest, auth_service: AuthServiceDep):
-
     result = await auth_service.login(login_data.username, login_data.password)
     user_out = UserOut.model_validate(result["user"])
     return Token(
         access_token=result["access_token"],
+        refresh_token=result["refresh_token"],
         token_type=result["token_type"],
         user=user_out,
     )
 
+@auth_router.post("/refresh", response_model=TokenRefreshResponse)
+async def refresh_token(data: RefreshTokenRequest, auth_service: AuthServiceDep):
+    return await auth_service.refresh_access_token(data.refresh_token)
 
-@router.get("/users/me", tags=["Users"], response_model=UserOut)
+
+@auth_router.post("/logout")
+async def logout(data: RefreshTokenRequest, auth_service: AuthServiceDep):
+    await auth_service.logout(data.refresh_token)
+
+
+@auth_router.post("/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    auth_service: AuthServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    await auth_service.change_password(current_user, data.old_password, data.new_password)
+
+users_router = APIRouter(prefix="/users", tags=["Users"])
+
+@users_router.put("/me", response_model=UserOut)
+async def update_my_profile(
+    data: UserUpdate,
+    user_service: UserServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    return await user_service.update_profile(current_user, data)
+
+@users_router.get("/me", response_model=UserOut)
 async def get_my_profile(
     user_service: UserServiceDep,
     current_user: User = Depends(get_current_user),
@@ -81,10 +111,9 @@ async def get_my_profile(
     return user_service.get_profile(current_user)
 
 
-@router.get(
-    "/users/me/medical-records",
-    response_model=PatientMedicalHistoryOut,
-    tags=["Patients"],
+@users_router.get(
+    "/me/medical-records",
+    response_model=PatientMedicalHistoryOut
 )
 async def get_my_medical_records(
     patient_service: PatientServiceDep,
@@ -96,12 +125,29 @@ async def get_my_medical_records(
         examinations=result["examinations"],
     )
 
-@router.get("/users/me/appointments", response_model=list[AppointmentOut])
+@users_router.get("/me/appointments", response_model=list[AppointmentOut])
 async def get_my_appointments(
     appointment_service: AppointmentServiceDep,
     current_user: User = Depends(get_current_user),
 ):
     return await appointment_service.get_user_appointments(current_user)
+
+@users_router.get("/me/payments",response_model=list[PaymentOut])
+async def get_my_payments(
+    payment_service: PaymentServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    return await payment_service.get_user_payments(current_user)
+
+@users_router.get(
+    "/me/chat-sessions",
+    response_model=list[ChatSessionOut]
+)
+async def get_my_chat_sessions(
+    chat_session_service: ChatSessionServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    return await chat_session_service.get_user_sessions(current_user)
 
 appointments_router = APIRouter(prefix="/appointments", tags=["Appointments"])
 
@@ -139,7 +185,6 @@ async def cancel_appointment(
         appointment_id, current_user, cancel_data
     )
 
-# thành cập nhật chung
 @appointments_router.patch("/{appointment_id}/status", response_model=AppointmentOut)
 async def update_appointment_status(
     appointment_id: int,
@@ -189,6 +234,13 @@ async def create_payment(
     )
     return PaymentOut.model_validate(payment)
 
+@appointments_router.get("/availability", response_model=DoctorAvailabilityOut)
+async def get_doctor_availability(
+    doctor_id: int,
+    date: date,
+    appointment_service: AppointmentServiceDep,
+):
+    return await appointment_service.get_doctor_availability(doctor_id, date)
 
 specialties_router = APIRouter(prefix="/specialties", tags=["Specialties"])
 
@@ -274,14 +326,6 @@ async def get_patient_medical_records(
         examinations=result["examinations"],
     )
 
-@router.get("/users/me/payments",response_model=list[PaymentOut])
-async def get_my_payments(
-    payment_service: PaymentServiceDep,
-    current_user: User = Depends(get_current_user),
-):
-    return await payment_service.get_user_payments(current_user)
-
-
 payments_router = APIRouter(prefix="/payments", tags=["Payments"])
 
 @payments_router.get("/{payment_id}", response_model=PaymentOut)
@@ -312,19 +356,6 @@ async def create_chat_session(
     current_user: User = Depends(get_current_user),
 ):
     return await chat_session_service.create_session(current_user, data.title)
-
-
-@router.get(
-    "/users/me/chat-sessions",
-    response_model=list[ChatSessionOut],
-    tags=["Chatbot Sessions"],
-)
-async def get_my_chat_sessions(
-    chat_session_service: ChatSessionServiceDep,
-    current_user: User = Depends(get_current_user),
-):
-    return await chat_session_service.get_user_sessions(current_user)
-
 
 @chat_router.post(
     "/sessions/{session_id}/messages", response_model=SendMessageResponse, status_code=201

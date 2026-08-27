@@ -58,7 +58,9 @@ from app.models import (
     Specialty,
     User,
     UserRole,
+    RefreshToken,
 )
+from app.repositories import RefreshTokenRepository
 from app.schemas import (
     AppointmentCancel,
     AppointmentCreate,
@@ -76,6 +78,8 @@ from app.schemas import (
     SpecialtyCreate,
     SpecialtyUpdate,
     UserCreate,
+    UserUpdate,
+    ScheduleSlotOut,
 )
 from app.utils import generate_record_number
 
@@ -109,26 +113,53 @@ def create_access_token(
     )
 
 class AuthService:
-    def __init__(self, user_repo: UserRepoDep):
+    def __init__(
+        self, user_repo: UserRepoDep, refresh_token_repo: RefreshTokenRepository
+    ):
         self.user_repo = user_repo
+        self.refresh_token_repo = refresh_token_repo
 
-    def decode_token(self, token: str) -> int:
+    def _decode_and_verify_type(self, token: str, expected_type: str) -> dict:
         try:
             payload = jwt.decode(
                 token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
             )
-        except JWTError:
-            raise InvalidTokenError()
+        except jwt.JWTError:
+            raise InvalidTokenError("Invalid token")
+        if payload.get("type", "access") != expected_type:
+            raise InvalidTokenError("Invalid token type")
+        return payload
+
+    def decode_token(self, token: str) -> int:
+        payload = self._decode_and_verify_type(token, "access")
         user_id = payload.get("id")
         if user_id is None:
-            raise InvalidTokenError()
+            raise InvalidTokenError("Invalid token payload")
         return user_id
+
+
+    async def create_refresh_token(self, user: User) -> str:
+        expire = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        record = await self.refresh_token_repo.create(
+            RefreshToken(user_id=user.id, expires_at=expire, revoked=False)
+        )
+        return jwt.encode(
+            {
+                "sub": user.username,
+                "id": user.id,
+                "jti": record.id,
+                "type": "refresh",
+                "exp": expire,
+            },
+            settings.SECRET_KEY,
+            algorithm=settings.ALGORITHM,
+        )
 
     async def get_current_user(self, token: str) -> User:
         user_id = self.decode_token(token)
         user = await self.user_repo.get_by_id(user_id)
         if user is None:
-            raise InvalidTokenError()
+            raise InvalidTokenError("User not found")
         return user
 
     async def register(self, user_data: UserCreate) -> User:
@@ -167,10 +198,17 @@ class AuthService:
         await self.user_repo.update(user)
 
         access_token = create_access_token(
-            data={"sub": user.username, "id": user.id, "role": user.role.value}
+            data={
+                "sub": user.username,
+                "id": user.id,
+                "role": user.role.value,
+                "type": "access",
+            }
         )
+        refresh_token = await self.create_refresh_token(user)
         return {
             "access_token": access_token,
+            "refresh_token": refresh_token,
             "token_type": "bearer",
             "user": user,
         }
@@ -187,12 +225,70 @@ class AuthService:
             return None
         return user
 
+    async def refresh_access_token(self, refresh_token_str: str) -> dict:
+        payload = self._decode_and_verify_type(refresh_token_str, "refresh")
+        jti, user_id = payload.get("jti"), payload.get("id")
+        if jti is None or user_id is None:
+            raise InvalidTokenError("Invalid token payload")
+
+        record = await self.refresh_token_repo.get_by_id(jti)
+        if record is None or record.revoked or record.expires_at < datetime.now(UTC):
+            raise InvalidTokenError("Invalid or expired refresh token")
+
+        user = await self.user_repo.get_by_id(record.user_id)
+        if user is None or not user.is_active:
+            raise InvalidTokenError("User not found or inactive")
+
+        await self.refresh_token_repo.revoke(record)
+        new_refresh_token = await self.create_refresh_token(user)
+        new_access_token = create_access_token(
+            data={
+                "sub": user.username,
+                "id": user.id,
+                "role": user.role.value,
+                "type": "access",
+            }
+        )
+        return {
+            "access_token": new_access_token,
+            "refresh_token": new_refresh_token,
+            "token_type": "bearer",
+        }
+
+    async def logout(self, refresh_token_str: str) -> None:
+        payload = self._decode_and_verify_type(refresh_token_str, "refresh")
+        jti = payload.get("jti")
+        if jti is None:
+            raise InvalidTokenError("Invalid token payload")
+        record = await self.refresh_token_repo.get_by_id(jti)
+        if record and not record.revoked:
+            await self.refresh_token_repo.revoke(record)
+
+    async def change_password(
+        self, current_user: User, old_password: str, new_password: str
+    ) -> None:
+        if not verify_password(old_password, current_user.password):
+            raise BadRequestException("Mật khẩu cũ không chính xác")
+        if old_password == new_password:
+            raise BadRequestException("Mật khẩu mới phải khác mật khẩu cũ")
+
+        current_user.password = hash_password(new_password)
+        await self.user_repo.update(current_user)
+        await self.refresh_token_repo.revoke_all_for_user(current_user.id)
+
+
 class UserService:
     def __init__(self, user_repo: UserRepoDep):
         self.user_repo = user_repo
 
     def get_profile(self, current_user: User):
         return current_user
+
+    async def update_profile(self, current_user: User, update_data: UserUpdate) -> User:
+        data = update_data.model_dump(exclude_unset=True)
+        for field, value in data.items():
+            setattr(current_user, field, value)
+        return await self.user_repo.update(current_user)
 
 
 class AppointmentService:
@@ -560,6 +656,34 @@ class AppointmentService:
         await self.appointment_repo.update(appointment)
 
         return payment
+
+    async def get_doctor_availability(self, doctor_id: int, work_date: date) -> dict:
+        doctor = await self.doctor_repo.get_active_by_id(doctor_id)
+        if not doctor:
+            raise ResourceNotFound("Không tìm thấy bác sĩ")
+
+        available_slots = await self.slot_repo.get_available_slots_by_doctor_and_date(
+            doctor_id, work_date
+        )
+
+        if not available_slots:
+            return {
+                "doctor_id": doctor_id,
+                "doctor_name": doctor.user.full_name,
+                "specialty": doctor.specialty.name,
+                "work_date": work_date,
+                "available_slots": []
+            }
+
+        return {
+            "doctor_id": doctor_id,
+            "doctor_name": doctor.user.full_name,
+            "specialty": doctor.specialty.name,
+            "work_date": work_date,
+            "available_slots": [
+                ScheduleSlotOut.model_validate(slot) for slot in available_slots
+            ]
+        }
 
 
 class SpecialtyService:
@@ -981,19 +1105,16 @@ class SpecialtyDetectionService:
         text_norm = re.sub(r'[.,!?;:()\[\]{}"\'\\]', " ", text_norm)
         tokens = text_norm.split()
 
-        # Nhi khoa
         if any(token in ["nhi", "nhi khoa", "bé", "trẻ em", "trẻ nhỏ", "sơ sinh", "cháu", "con"] for token in tokens):
             return "Nhi Khoa"
         if "con" in tokens and "tôi" in tokens:
             return "Nhi Khoa"
 
-        # Cấp cứu
         if any(term in text_norm for term in ["cấp cứu", "a9", "nguy cấp", "nguy kịch"]):
             return "Cấp Cứu A9"
         if any(term in text_norm for term in ["hồi sức", "icu", "thở máy"]):
             return "Hồi Sức Tích Cực"
 
-        # Chuyên khoa
         for spec, keywords in self.rules.items():
             for kw in keywords:
                 if " " in kw:
@@ -1173,19 +1294,16 @@ class AIChatService:
     def _resolve_specialty(
             self, user_message: str, chat_history: list[Any] | None
     ) -> Optional[str]:
-        # 1. Thử detect từ câu hiện tại
         specialty = self.specialty_detector.detect(user_message)
         if specialty or not chat_history:
             return specialty
 
-        # 2. Dò ngược chat_history tìm specialty
         for turn in reversed(chat_history):
             content = self._extract_turn_content(turn)
             inherited = self.specialty_detector.detect(content)
             if inherited:
                 return inherited
 
-        # 3. Fallback rules
         for turn in reversed(chat_history):
             text_lower = self._extract_turn_content(turn).lower()
             for spec, kws in self.FALLBACK_SPECIALTY_RULES.items():
@@ -1343,37 +1461,30 @@ Hãy trả lời câu hỏi: "{user_message}" một cách ân cần, ngắn gọ
     ) -> dict:
         msg_lower = user_message.lower()
 
-        # 1. Emergency check
         if self.emergency_service.check(msg_lower):
             return {
                 "reply": self.emergency_service.get_response(),
                 "suggestions": [],
             }
 
-        # 2. Extract intents
         specialty = self._resolve_specialty(user_message, chat_history)
         max_fee = self._extract_max_fee(user_message)
         doctor_name = self._extract_doctor_name(user_message)
 
-        # 3. RAG query check
         is_rag_query = any(k in msg_lower for k in RAG_KEYWORDS)
         context_rag = (
             await self.rag_service.search(user_message) if is_rag_query else ""
         )
 
-        # 4. Doctor intent check (chỉ dựa trên msg_lower hiện tại)
         has_explicit_doctor_intent = any(k in msg_lower for k in DOCTOR_INTENT_KEYWORDS)
 
-        # Chỉ set doctor_query_intent khi người dùng hỏi rõ về bác sĩ/giá
         doctor_query_intent = bool(
             max_fee or doctor_name or (specialty and has_explicit_doctor_intent)
         )
 
-        # Nếu là RAG query thuần túy (không có ý định tìm bác sĩ)
         if is_rag_query and not (max_fee or doctor_name or has_explicit_doctor_intent):
             doctor_query_intent = False
 
-        # 5. Xử lý theo intent
         if doctor_query_intent:
             doctors, found = await self.doctor_search.search(
                 specialty_name=specialty,
@@ -1402,7 +1513,6 @@ Hãy trả lời câu hỏi: "{user_message}" một cách ân cần, ngắn gọ
                     ],
                 }
 
-        # 6. Triệu chứng thuần túy → tư vấn chuyên khoa
         if specialty and not has_explicit_doctor_intent:
             reply = f"Với triệu chứng bạn mô tả, bạn nên đến {specialty} để được khám và tư vấn.\n"
             reply += "Bạn có thể đến Khoa Khám bệnh (78 Giải Phóng, Hà Nội) để được hướng dẫn chi tiết."
@@ -1416,7 +1526,6 @@ Hãy trả lời câu hỏi: "{user_message}" một cách ân cần, ngắn gọ
                 ],
             }
 
-        # 7. Fallback: dùng LLM + RAG
         prompt = self._build_rag_prompt(user_message, context_rag, chat_history)
         reply = await self.llm_service.generate(prompt)
         return {
@@ -1465,21 +1574,17 @@ class ChatSessionService:
     ) -> dict:
         session = await self.get_owned_session(session_id, current_user)
 
-        # Lấy lịch sử chat
         history = await self.message_repo.get_by_session(session_id)
         chat_history = [{"role": m.role, "content": m.content} for m in history]
 
-        # Lưu tin nhắn user
         user_message = await self.message_repo.create(
             ChatMessage(session_id=session.id, role="user", content=content)
         )
 
-        # Gọi AI service
         result = await self.ai_chat_service.chat(
             user_message=content, chat_history=chat_history
         )
 
-        # Lưu tin nhắn assistant
         assistant_message = await self.message_repo.create(
             ChatMessage(
                 session_id=session.id,
@@ -1488,7 +1593,6 @@ class ChatSessionService:
             )
         )
 
-        # Cập nhật session
         session.updated_date = datetime.now()
         if session.title is None or session.title == "Cuộc trò chuyện mới":
             session.title = content[:50]

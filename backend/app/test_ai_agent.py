@@ -13,7 +13,6 @@ BOLD = "\033[1m"
 RESET = "\033[0m"
 
 TEST_SUITE = [
-    # NHÓM 1: CẤP CỨU KHẨN CẤP
     {
         "name": "TC01 [Cấp cứu]: Khó thở dữ dội + đau ngực",
         "payload": {"message": "Tôi bị khó thở dữ dội và đau ngực, Trung tâm Cấp cứu A9 ở đâu?"},
@@ -36,7 +35,6 @@ TEST_SUITE = [
         "expect_suggestions": [],
     },
 
-    # NHÓM 2: MULTI-TURN MEMORY
     {
         "name": "TC04 [Đa lượt]: Khám Mắt -> Lọc giá < 400k",
         "payload": {
@@ -77,7 +75,6 @@ TEST_SUITE = [
         "expect_suggestions": ["Đặt lịch khám"],
     },
 
-    # NHÓM 3: CHUYÊN KHOA SÂU
     {
         "name": "TC07 [Chuyên khoa]: Viện Huyết học và Truyền máu Bạch Mai",
         "payload": {"message": "Viện Huyết học và Truyền máu Bạch Mai có bác sĩ nào khám?"},
@@ -100,7 +97,6 @@ TEST_SUITE = [
         "expect_suggestions": ["Đặt lịch khám"],
     },
 
-    # NHÓM 4: BỘ LỌC GIÁ
     {
         "name": "TC10 [Lọc giá]: Khoa Mắt < 200k (Từ chối đúng)",
         "payload": {"message": "Có bác sĩ Khoa Mắt nào khám dưới 200k không?"},
@@ -123,7 +119,6 @@ TEST_SUITE = [
         "expect_suggestions": ["Đặt lịch khám"],
     },
 
-    # NHÓM 5: CHỐNG ẢO GIÁC
     {
         "name": "TC13 [Chống ảo giác]: Khoa Da Liễu (Rỗng DB)",
         "payload": {"message": "Tôi bị mẩn ngứa dị ứng, có bác sĩ Da liễu nào khám không?"},
@@ -139,7 +134,6 @@ TEST_SUITE = [
         "expect_suggestions": ["Đến Khoa Khám bệnh"],
     },
 
-    # NHÓM 6: RAG QUY TRÌNH
     {
         "name": "TC15 [RAG]: Giấy tờ tái khám",
         "payload": {"message": "Quy trình tái khám tại Bệnh viện Bạch Mai cần mang những giấy tờ gì?"},
@@ -169,7 +163,6 @@ TEST_SUITE = [
         "expect_suggestions": [],
     },
 
-    # NHÓM 7: PHÂN LUỒNG TRIỆU CHỨNG
     {
         "name": "TC19 [Triệu chứng]: Tiêu hóa (Ợ chua)",
         "payload": {"message": "Tôi hay bị ợ chua, nóng rát vùng thượng vị sau khi ăn, nên khám khoa nào?"},
@@ -278,7 +271,6 @@ def run_automation_suite():
                 is_pass = False
                 fail_reasons.append(f"Xuất hiện từ cấm: '{kw}'")
 
-        # Kiểm tra suggestions
         for sugg in tc.get("expect_suggestions", []):
             if not any(sugg.lower() in s for s in suggestions_lower):
                 is_pass = False

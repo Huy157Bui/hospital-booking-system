@@ -27,6 +27,7 @@ from app.models import (
     PaymentStatus,
     ChatSession,
     ChatMessage,
+    RefreshToken,
 )
 
 ModelType = TypeVar("ModelType", bound=Base)
@@ -377,6 +378,31 @@ class ScheduleSlotRepository(BaseRepository[ScheduleSlot]):
             .order_by(ScheduleSlot.start_time)
         )
         result = await self.db.execute(statement)
+        return list(result.scalars().all())
+
+    async def get_available_slots_by_doctor_and_date(
+        self, doctor_id: int, work_date: date
+    ) -> list[ScheduleSlot]:
+        stmt = (
+            select(ScheduleSlot)
+            .join(Schedule)
+            .where(
+                Schedule.doctor_id == doctor_id,
+                Schedule.work_date == work_date,
+                Schedule.status == ScheduleStatus.OPEN,
+                ScheduleSlot.status == ScheduleSlotStatus.AVAILABLE,
+            )
+            .options(
+                selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.user),
+                selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.specialty),
+            )
+            .order_by(ScheduleSlot.start_time)
+        )
+        result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
 
@@ -798,7 +824,7 @@ class ReportRepository(BaseRepository[Appointment]):
             .order_by("day")
         )
         result_daily = await self.db.execute(query_daily)
-        daily_rows = result_daily.all()  # list of (day, status, count)
+        daily_rows = result_daily.all()
 
         query_total = select(func.count()).select_from(Appointment).where(*conditions)
         total = await self.db.scalar(query_total)
@@ -833,3 +859,23 @@ class ChatMessageRepository(BaseRepository[ChatMessage]):
             .order_by(ChatMessage.created_date.asc())
         )
         return list(result.scalars().all())
+
+class RefreshTokenRepository(BaseRepository[RefreshToken]):
+    def __init__(self, db: AsyncSession) -> None:
+        super().__init__(RefreshToken, db)
+
+    async def revoke(self, token: RefreshToken) -> RefreshToken:
+        token.revoked = True
+        return await self.update(token)
+
+    async def revoke_all_for_user(self, user_id: int) -> None:
+        result = await self.db.execute(
+            select(RefreshToken).where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.revoked == False,
+            )
+        )
+        tokens = result.scalars().all()
+        for token in tokens:
+            token.revoked = True
+        await self.db.flush()
