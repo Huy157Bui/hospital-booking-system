@@ -1,0 +1,182 @@
+{
+  "model": "qwen2.5:3b",
+  "success_rate": 80.0,
+  "success_count": 16,
+  "fail_count": 4,
+  "average_latency": 0.4529780149459839,
+  "results": [
+    {
+      "test_case": "Tôi muốn tìm bác sĩ tim mạch giá dưới 500k",
+      "tool": "search_doctors",
+      "args": {
+        "max_fee": 500000,
+        "specialty_name": "Tim Mạch"
+      },
+      "status": "SUCCESS",
+      "latency": 1.1879818439483643
+    },
+    {
+      "test_case": "Bác sĩ nào khám mắt giỏi?",
+      "tool": "search_doctors",
+      "args": {
+        "specialty_name": "Mắt"
+      },
+      "status": "SUCCESS",
+      "latency": 0.3377254009246826
+    },
+    {
+      "test_case": "Ngày mai bác sĩ Nguyễn Văn A có lịch trống không?",
+      "tool": null,
+      "args": null,
+      "status": "NO_TOOL_CALL",
+      "latency": 0.36899828910827637
+    },
+    {
+      "test_case": "Đặt lịch khám nội khoa lúc 8h sáng mai",
+      "tool": "search_doctors",
+      "args": {
+        "specialty_name": "Nội Khoa"
+      },
+      "status": "SUCCESS",
+      "latency": 0.3654625415802002
+    },
+    {
+      "test_case": "Chi phí khám da liễu bao nhiêu?",
+      "tool": "search_doctors",
+      "args": {
+        "max_fee": 500000,
+        "specialty_name": "Da Liễu"
+      },
+      "status": "SUCCESS",
+      "latency": 0.523658037185669
+    },
+    {
+      "test_case": "Tôi bị đau đầu nên khám khoa nào?",
+      "tool": "list_specialties",
+      "args": {},
+      "status": "SUCCESS",
+      "latency": 0.2471299171447754
+    },
+    {
+      "test_case": "Có bác sĩ nhi khoa nào làm việc thứ 7 không?",
+      "tool": null,
+      "args": null,
+      "status": "NO_TOOL_CALL",
+      "latency": 0.36385512351989746
+    },
+    {
+      "test_case": "Đặt lịch khám tim mạch cho mẹ tôi",
+      "tool": "search_doctors",
+      "args": {
+        "specialty_name": "Tim Mạch"
+      },
+      "status": "SUCCESS",
+      "latency": 0.3529624938964844
+    },
+    {
+      "test_case": "Bác sĩ nào giỏi về xương khớp?",
+      "tool": "search_doctors",
+      "args": {
+        "specialty_name": "Xương Khớp"
+      },
+      "status": "SUCCESS",
+      "latency": 0.3766286373138428
+    },
+    {
+      "test_case": "Giá khám tổng quát là bao nhiêu?",
+      "tool": "search_doctors",
+      "args": {
+        "specialty_name": "Tổng Quát",
+        "max_fee": null
+      },
+      "status": "SUCCESS",
+      "latency": 0.4554128646850586
+    },
+    {
+      "test_case": "Tôi muốn khám thần kinh vào chiều nay",
+      "tool": null,
+      "args": null,
+      "status": "NO_TOOL_CALL",
+      "latency": 0.7595508098602295
+    },
+    {
+      "test_case": "Lịch khám của bác sĩ Trần Thị B tuần sau?",
+      "tool": "list_specialties",
+      "args": {},
+      "status": "SUCCESS",
+      "latency": 0.6135461330413818
+    },
+    {
+      "test_case": "Có phòng khám tai mũi họng nào gần đây không?",
+      "tool": "list_specialties",
+      "args": {},
+      "status": "SUCCESS",
+      "latency": 0.246429443359375
+    },
+    {
+      "test_case": "Đặt lịch khám mắt cho con tôi 5 tuổi",
+      "tool": "search_doctors",
+      "args": {
+        "specialty_name": "Mắt",
+        "doctor_name": "",
+        "max_fee": 0
+      },
+      "status": "SUCCESS",
+      "latency": 0.49387669563293457
+    },
+    {
+      "test_case": "Bác sĩ tim mạch nào nhận BHYT?",
+      "tool": "search_doctors",
+      "args": {
+        "specialty_name": "Tim Mạch"
+      },
+      "status": "SUCCESS",
+      "latency": 0.35216188430786133
+    },
+    {
+      "test_case": "Khám phụ khoa giá bao nhiêu?",
+      "tool": "search_doctors",
+      "args": {
+        "specialty_name": "Phụ Khoa",
+        "doctor_name": "",
+        "max_fee": 5000000
+      },
+      "status": "SUCCESS",
+      "latency": 0.6064443588256836
+    },
+    {
+      "test_case": "Tôi cần tìm bác sĩ nội tiết",
+      "tool": "search_doctors",
+      "args": {
+        "specialty_name": "Nội tiết"
+      },
+      "status": "SUCCESS",
+      "latency": 0.3523859977722168
+    },
+    {
+      "test_case": "Ngày 20/1 có lịch trống của bác sĩ nào không?",
+      "tool": null,
+      "args": null,
+      "status": "NO_TOOL_CALL",
+      "latency": 0.33718156814575195
+    },
+    {
+      "test_case": "Đặt lịch khám hô hấp gấp",
+      "tool": "search_doctors",
+      "args": {
+        "specialty_name": "Hô hấp"
+      },
+      "status": "SUCCESS",
+      "latency": 0.35210490226745605
+    },
+    {
+      "test_case": "Bác sĩ da liễu nào giỏi nhất?",
+      "tool": "search_doctors",
+      "args": {
+        "specialty_name": "Da Liễu"
+      },
+      "status": "SUCCESS",
+      "latency": 0.36606335639953613
+    }
+  ]
+}
