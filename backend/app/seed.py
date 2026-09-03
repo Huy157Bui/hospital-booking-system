@@ -48,8 +48,12 @@ from app.models import (
     SpecialtyStatus,
     User,
     UserRole,
+    ChatMessage,
+    ChatSession,
+    RefreshToken,
 )
 from app.services import hash_password
+from sqlalchemy import text
 
 
 def random_date(start: date, end: date) -> date:
@@ -59,11 +63,13 @@ def random_date(start: date, end: date) -> date:
 
 async def seed():
     async with AsyncSessionLocal() as db:
-        print("🧹 Đang dọn dẹp dữ liệu cũ trong Database...")
-        await db.execute(delete(Payment))
+        print("Xóa dữ liệu cũ")
+        await db.execute(text("SET FOREIGN_KEY_CHECKS = 0"))
+
         await db.execute(delete(PrescriptionDetail))
         await db.execute(delete(Prescription))
         await db.execute(delete(Examination))
+        await db.execute(delete(Payment))
         await db.execute(delete(Appointment))
         await db.execute(delete(ScheduleSlot))
         await db.execute(delete(Schedule))
@@ -73,6 +79,30 @@ async def seed():
         await db.execute(delete(User))
         await db.execute(delete(Medicine))
         await db.execute(delete(Specialty))
+        await db.execute(delete(ChatMessage))
+        await db.execute(delete(ChatSession))
+        await db.execute(delete(RefreshToken))
+
+        await db.execute(text("SET FOREIGN_KEY_CHECKS = 1"))
+        await db.flush()
+
+        for table_name in [
+            "users",
+            "doctors",
+            "patients",
+            "specialties",
+            "schedules",
+            "schedule_slots",
+            "appointments",
+            "medical_records",
+            "prescriptions",
+            "prescription_detail",
+            "payments",
+            "chat_sessions",
+            "chat_messages",
+            "refresh_tokens",
+        ]:
+            await db.execute(text(f"ALTER TABLE {table_name} AUTO_INCREMENT = 1"))
         await db.flush()
 
         password = hash_password("123456")
@@ -274,7 +304,11 @@ async def seed():
         print("📅 Đang sinh Lịch làm việc và Ca khám cho các Bác sĩ...")
         today = date.today()
         past_dates = [today - timedelta(days=i) for i in range(15, 0, -1)]
-        future_dates = [today + timedelta(days=i) for i in range(7)]
+        future_dates = [today + timedelta(days=i) for i in range(14)]
+
+        test_date = date(2026, 9, 15)
+        if test_date not in future_dates:
+            future_dates.append(test_date)
 
         sample_doctors = random.sample(doctors, min(200, len(doctors))) if doctors else []
 
@@ -371,20 +405,30 @@ async def seed():
                 )
                 db.add(payment)
 
-        for doc in sample_doctors:
-            for d in future_dates:
-                sched = Schedule(doctor_id=doc.id, work_date=d, status=ScheduleStatus.OPEN)
-                db.add(sched)
-                await db.flush()
+        print("📌 Đang tạo slot cố định cho ngày test 15/09/2026...")
+        test_work_date = date(2026, 9, 15)
 
-                for start_h in [8, 9, 10, 13, 14, 15]:
-                    slot = ScheduleSlot(
-                        schedule_id=sched.id,
-                        start_time=time(start_h, 0),
-                        end_time=time(start_h, 30),
-                        status=ScheduleSlotStatus.AVAILABLE,
-                    )
-                    db.add(slot)
+        for doc in doctors:
+            # Kiểm tra xem doctor đã có schedule ngày test chưa
+            # Nếu chưa, tạo mới
+            sched = Schedule(
+                doctor_id=doc.id,
+                work_date=test_work_date,
+                status=ScheduleStatus.OPEN,
+            )
+            db.add(sched)
+            await db.flush()
+
+            for start_h in [8, 9, 10, 13, 14, 15]:
+                slot = ScheduleSlot(
+                    schedule_id=sched.id,
+                    start_time=time(start_h, 0),
+                    end_time=time(start_h, 30),
+                    status=ScheduleSlotStatus.AVAILABLE,
+                )
+                db.add(slot)
+
+        await db.flush()
 
         await db.commit()
         await db.close()

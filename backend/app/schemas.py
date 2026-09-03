@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -656,6 +656,47 @@ class DoctorAvailabilityOut(BaseModel):
 class AppointmentAvailabilityQuery(BaseModel):
     doctor_id: int
     date: date
+
+class SearchDoctorsInput(BaseModel):
+    specialty_name: Optional[str] = Field(
+        None,
+        description="Tên chuyên khoa tiếng Việt, ví dụ: Tim Mạch, Da Liễu, Nhi Khoa",
+    )
+    max_fee: Optional[float] = Field(
+        None, description="Giá khám tối đa mà người dùng chấp nhận, đơn vị VNĐ"
+    )
+    doctor_name: Optional[str] = Field(
+        None, description="Tên bác sĩ cụ thể nếu người dùng hỏi đích danh"
+    )
+
+class CheckAvailabilityInput(BaseModel):
+    doctor_id: int = Field(
+        ..., description="ID bác sĩ — PHẢI lấy từ kết quả search_doctors đã gọi trước đó"
+    )
+    work_date: str = Field(
+        ..., description="Ngày muốn khám, định dạng YYYY-MM-DD"
+    )
+
+class ListSpecialtiesInput(BaseModel):
+    pass
+
+class BookAppointmentInput(BaseModel):
+    slot_id: int = Field(
+        ..., description="ID khung giờ khám — PHẢI lấy từ kết quả check_availability đã gọi trước đó"
+    )
+    reason: Optional[str] = Field(
+        None, description="Lý do khám, chỉ để hiển thị cho người dùng xác nhận"
+    )
+
+class SearchKnowledgeInput(BaseModel):
+    query: str = Field(
+        ...,
+        description=(
+            "Câu hỏi hoặc từ khóa cần tra cứu trong tài liệu quy trình/chính sách "
+            "bệnh viện. Ví dụ: 'thủ tục khám BHYT trái tuyến', 'giờ làm việc thứ 7', "
+            "'quy trình tái khám'."
+        ),
+    )
 
 DoctorOut.model_rebuild()
 DoctorScheduleOut.model_rebuild()

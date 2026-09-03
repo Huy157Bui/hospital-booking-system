@@ -1,3 +1,11 @@
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+
+
 from contextlib import asynccontextmanager
 from starlette.requests import Request
 
@@ -6,6 +14,8 @@ from starlette.responses import JSONResponse
 
 from app.admin import admin_router, reports_router
 from app.routers import (
+    auth_router,
+    users_router,
     patients_router,
     doctors_router,
     specialties_router,
@@ -32,6 +42,8 @@ async def app_exception_handler(request: Request, exc: AppException):
     )
 
 app.include_router(admin_router)
+app.include_router(auth_router)
+app.include_router(users_router)
 app.include_router(patients_router)
 app.include_router(doctors_router)
 app.include_router(specialties_router)

@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 from datetime import date, datetime
 from typing import Generic, TypeVar, cast
 
@@ -120,6 +124,26 @@ class PatientRepository(BaseRepository[Patient]):
 class DoctorRepository(BaseRepository[Doctor]):
     def __init__(self, db: AsyncSession) -> None:
         super().__init__(Doctor, db)
+
+    async def search_doctors_with_filters(
+        self,
+        max_fee: float | None = None,
+        limit: int | None = None,
+    ) -> list[Doctor]:
+        stmt = (
+            select(Doctor)
+            .where(Doctor.status == "active")
+            .options(selectinload(Doctor.user), selectinload(Doctor.specialty))
+        )
+
+        if max_fee and max_fee > 0:
+            stmt = stmt.where(Doctor.consultation_fee <= max_fee)
+
+        if limit:
+            stmt = stmt.limit(limit)
+
+        result = await self.db.execute(stmt)
+        return list(result.scalars().unique().all())
 
     async def get_by_license(self, license_number: str) -> Doctor | None:
         result = await self.db.execute(
@@ -478,18 +502,53 @@ class AppointmentRepository(BaseRepository[Appointment]):
         stmt = (
             select(Appointment)
             .options(
-                selectinload(Appointment.slot).selectinload(ScheduleSlot.schedule)
+                selectinload(Appointment.patient),
+                selectinload(Appointment.slot).selectinload(ScheduleSlot.schedule),
             )
             .where(Appointment.id == appointment_id)
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_doctor_id_by_slot(self, slot_id: int) -> int | None:
+        stmt = (
+            select(Schedule.doctor_id)
+            .join(ScheduleSlot, ScheduleSlot.schedule_id == Schedule.id)
+            .where(ScheduleSlot.id == slot_id)
+        )
+        result = await self.db.execute(stmt)
+        doctor_id = result.scalar_one_or_none()
+        logger.info(f"  get_doctor_id_by_slot: slot_id={slot_id} → doctor_id={doctor_id}")
+        return doctor_id
+
+    async def get_slot_with_doctor(self, slot_id: int) -> dict | None:
+        """Tra 1 lần: slot + doctor_id + work_date + status — không cần đoán ngày"""
+        stmt = (
+            select(ScheduleSlot, Schedule.doctor_id, Schedule.work_date)
+            .join(Schedule, ScheduleSlot.schedule_id == Schedule.id)
+            .where(ScheduleSlot.id == slot_id)
+        )
+        result = await self.db.execute(stmt)
+        row = result.first()
+        if not row:
+            return None
+        slot, doctor_id, work_date = row
+        return {
+            "slot_id": slot.id,
+            "doctor_id": doctor_id,
+            "work_date": work_date,
+            "start_time": slot.start_time,
+            "end_time": slot.end_time,
+            "status": slot.status,
+        }
+
     async def cancel(self, appointment: Appointment, cancel_reason: str) -> Appointment:
         appointment.status = AppointmentStatus.CANCELLED
         appointment.cancel_reason = cancel_reason
         appointment.slot.status = ScheduleSlotStatus.AVAILABLE
         await self.db.flush()
+        await self.db.refresh(appointment.slot, attribute_names=["updated_date"])
+
         return appointment
 
     async def update_status(

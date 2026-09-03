@@ -19,7 +19,7 @@ from app.dependencies.repos import (
     UserRepoDep,
     ChatSessionRepoDep,
     ChatMessageRepoDep,
-    RefreshTokenRepoDep
+    RefreshTokenRepoDep,
 )
 from app.services import (
     AIChatService,
@@ -38,6 +38,7 @@ from app.services import (
     SpecialtyService,
     UserService,
     ChatSessionService,
+    AgentChatService,
 )
 
 
@@ -73,8 +74,8 @@ AppointmentServiceDep = Annotated[
 ]
 
 
-def get_auth_service(user_repo: UserRepoDep, refresh_token_repo: RefreshTokenRepoDep) -> AuthService:
-    return AuthService(user_repo, refresh_token_repo)
+def get_auth_service(user_repo: UserRepoDep, patient_repo: PatientRepoDep, refresh_token_repo: RefreshTokenRepoDep) -> AuthService:
+    return AuthService(user_repo,patient_repo, refresh_token_repo)
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
@@ -245,17 +246,40 @@ def get_ai_chat_service(
 
 AIChatServiceDep = Annotated[AIChatService, Depends(get_ai_chat_service)]
 
+def get_agent_chat_service(
+    specialty_detector: SpecialtyDetectionServiceDep,
+    doctor_search: DoctorSearchServiceDep,
+    rag_service: RAGServiceDep,
+    emergency_service: EmergencyServiceDep,
+    specialty_service: SpecialtyServiceDep,
+    appointment_service: AppointmentServiceDep,
+    patient_service: PatientServiceDep,
+    ai_chat_service: AIChatServiceDep,
+) -> AgentChatService:
+    return AgentChatService(
+        specialty_detector=specialty_detector,
+        doctor_search=doctor_search,
+        rag_service=rag_service,
+        emergency_service=emergency_service,
+        specialty_service=specialty_service,
+        appointment_service=appointment_service,
+        patient_service=patient_service,
+        legacy_chat_service=ai_chat_service,
+    )
+
+AgentChatServiceDep = Annotated[AgentChatService, Depends(get_agent_chat_service)]
+
 def get_chat_session_service(
     session_repo: ChatSessionRepoDep,
     message_repo: ChatMessageRepoDep,
     ai_chat_service: AIChatServiceDep,
+    agent_chat_service: AgentChatServiceDep,
 ) -> ChatSessionService:
     return ChatSessionService(
         session_repo=session_repo,
         message_repo=message_repo,
         ai_chat_service=ai_chat_service,
+        agent_chat_service=agent_chat_service,
     )
 
-ChatSessionServiceDep = Annotated[
-    ChatSessionService, Depends(get_chat_session_service)
-]
+ChatSessionServiceDep = Annotated[ChatSessionService, Depends(get_chat_session_service)]

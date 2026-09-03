@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import re
 import unicodedata
@@ -10,7 +11,10 @@ from typing import Any, Optional
 import chromadb
 from chromadb.utils import embedding_functions
 from jose import JWTError, jwt
-from langchain_community.chat_models import ChatOllama
+from langchain_ollama import ChatOllama
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field, ValidationError
 from passlib.context import CryptContext
 from passlib.exc import InvalidTokenError
 
@@ -59,6 +63,7 @@ from app.models import (
     User,
     UserRole,
     RefreshToken,
+    Gender,
 )
 from app.repositories import RefreshTokenRepository
 from app.schemas import (
@@ -80,6 +85,12 @@ from app.schemas import (
     UserCreate,
     UserUpdate,
     ScheduleSlotOut,
+    AppointmentAvailabilityQuery,
+    CheckAvailabilityInput,
+    SearchDoctorsInput,
+    ListSpecialtiesInput,
+    BookAppointmentInput,
+    PatientUpdate,
 )
 from app.utils import generate_record_number
 
@@ -114,9 +125,13 @@ def create_access_token(
 
 class AuthService:
     def __init__(
-        self, user_repo: UserRepoDep, refresh_token_repo: RefreshTokenRepository
+        self,
+        user_repo: UserRepoDep,
+        patient_repo: PatientRepoDep,
+        refresh_token_repo: RefreshTokenRepository,
     ):
         self.user_repo = user_repo
+        self.patient_repo = patient_repo
         self.refresh_token_repo = refresh_token_repo
 
     def _decode_and_verify_type(self, token: str, expected_type: str) -> dict:
@@ -179,7 +194,17 @@ class AuthService:
             is_active=True,
             password=hashed_password,
         )
-        return await self.user_repo.create(user)
+        created_user = await self.user_repo.create(user)
+
+        if created_user.role == UserRole.PATIENT:
+            patient = Patient(
+                id=created_user.id,
+                gender=Gender.FEMALE,
+            )
+            await self.patient_repo.create(patient)
+            await self.patient_repo.commit()
+
+        return created_user
 
     async def authenticate(self, username: str, password: str) -> User | None:
         user = await self.user_repo.get_by_username(username)
@@ -824,6 +849,16 @@ class PatientService:
         self.doctor_repo = doctor_repo
         self.appointment_repo = appointment_repo
 
+    async def update_patient_profile(
+            self, patient: Patient, update_data: PatientUpdate
+    ) -> Patient:
+        data = update_data.model_dump(exclude_unset=True)
+        for field, value in data.items():
+            setattr(patient, field, value)
+        updated_patient = await self.patient_repo.update(patient)
+        await self.patient_repo.commit()
+        return updated_patient
+
     async def get_owned_medical_record(self, patient_id: int) -> MedicalRecord:
         record = await self.medical_record_repo.get_by_patient_id(patient_id)
         if record is None:
@@ -1072,7 +1107,7 @@ DOCTOR_INTENT_KEYWORDS = [
 ]
 
 logger = logging.getLogger(__name__)
-
+_pending_bookings: dict[int, dict[str, Any]] = {}
 VN_CHARS = r"a-z0-9_àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ"
 
 
@@ -1163,6 +1198,7 @@ class RAGService:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._search_sync, query)
 
+
 class DoctorSearchService:
     def __init__(self, doctor_repo: DoctorRepoDep):
         self.doctor_repo = doctor_repo
@@ -1173,44 +1209,55 @@ class DoctorSearchService:
         max_fee: float | None = None,
         doctor_name: str | None = None,
     ) -> tuple[list[Doctor], bool]:
-        doctors = await self.doctor_repo.search_doctors_for_ai(
-            specialty_name=None, max_fee=None
+        doctors = await self.doctor_repo.search_doctors_with_filters(
+            max_fee=max_fee
         )
+
         if not doctors:
             return [], False
 
         if doctor_name:
-            d_name_lower = doctor_name.lower().strip()
+            search_name = self._normalize_text(doctor_name)
             doctors = [
-                d for d in doctors
-                if d_name_lower in (
-                    getattr(d, "full_name", "")
-                    or (d.user.full_name if getattr(d, "user", None) else "")
-                ).lower()
+                d
+                for d in doctors
+                if d.user
+                and search_name in self._normalize_text(d.user.full_name or "")
             ]
             if not doctors:
                 return [], False
 
         if specialty_name:
-            spec_lower = specialty_name.lower().strip()
-            doctors = [
-                d for d in doctors
-                if getattr(d, "specialty", None) and d.specialty.name
-                and (spec_lower in d.specialty.name.lower() or d.specialty.name.lower() in spec_lower)
-            ]
-            if not doctors:
-                return [], False
+            search_specialty = self._normalize_text(specialty_name)
 
-        if max_fee and max_fee > 0:
-            doctors = [
-                d for d in doctors
-                if float(getattr(d, "consultation_fee", 0) or 0) <= max_fee
-            ]
+            filtered = []
+            for doctor in doctors:
+                if doctor.specialty and doctor.specialty.name:
+                    doctor_specialty = self._normalize_text(doctor.specialty.name)
+
+                    # Chỉ match 1 chiều: search_specialty phải nằm TRONG doctor_specialty
+                    if search_specialty in doctor_specialty:
+                        filtered.append(doctor)
+
+            doctors = filtered
             if not doctors:
                 return [], False
 
         doctors.sort(key=lambda d: float(getattr(d, "consultation_fee", 0) or 0))
+
         return doctors[:5], True
+
+    def _normalize_text(self, text: str) -> str:
+        if not text:
+            return ""
+
+        text = unicodedata.normalize('NFKD', text)
+        text = ''.join([c for c in text if not unicodedata.combining(c)])
+
+        text = text.lower()
+        text = re.sub(r'\s+', ' ', text).strip()
+
+        return text
 
 class EmergencyService:
     KEYWORDS = EMERGENCY_KEYWORDS
@@ -1297,15 +1344,20 @@ class AIChatService:
         specialty = self.specialty_detector.detect(user_message)
         if specialty or not chat_history:
             return specialty
-
         for turn in reversed(chat_history):
-            content = self._extract_turn_content(turn)
+            role = turn.get("role") if isinstance(turn, dict) else getattr(turn, "role", "user")
+            if role != "user":
+                continue
+            content = turn.get("content") if isinstance(turn, dict) else getattr(turn, "content", "")
             inherited = self.specialty_detector.detect(content)
             if inherited:
                 return inherited
-
         for turn in reversed(chat_history):
-            text_lower = self._extract_turn_content(turn).lower()
+            role = turn.get("role") if isinstance(turn, dict) else getattr(turn, "role", "user")
+            if role != "user":
+                continue
+            text_lower = turn.get("content") if isinstance(turn, dict) else getattr(turn, "content", "")
+            text_lower = text_lower.lower()
             for spec, kws in self.FALLBACK_SPECIALTY_RULES.items():
                 if any(kw in text_lower for kw in kws):
                     return spec
@@ -1359,51 +1411,48 @@ class AIChatService:
         if not text:
             return None
         text_norm = normalize_vietnamese(text)
-        prefix_pattern = r"(?:bác\s+sĩ|bs\.?|tiến\s+sĩ|thạc\s+sĩ|pgs\.?\s*ts\.?|gs\.?\s*ts\.?|ts\.?|dr\.?)\s+([A-ZÀ-Ỹa-zà-ỹ\s]+)"
-        match = re.search(prefix_pattern, text_norm, re.IGNORECASE)
+
+        prefix_pattern = r"(?:bác\s+sĩ|bs\.?|tiến\s+sĩ|thạc\s+sĩ|pgs\.?\s*ts\.?|gs\.?\s*ts\.?|ts\.?|dr\.?)\s+(?:tên\s+|là\s+|có\s+tên\s+)?([A-ZÀ-Ỹ][a-zà-ỹ\s]+)"
+        match = re.search(prefix_pattern, text_norm)
+
         if match:
             raw_name = match.group(1).strip()
             stop_words = (
                 r"\b(có|ở|tại|làm việc|khám|không|tư vấn|cho|nào|được|\?|,|\.)\b"
             )
             clean_name = re.split(stop_words, raw_name, flags=re.IGNORECASE)[0].strip()
-            invalid_starts = [
-                "cho",
-                "nào",
-                "tư vấn",
-                "hãy",
-                "giúp",
-                "trực",
-                "khoa",
-                "bệnh viện",
-                "trung tâm",
-                "đang",
-                "công tác",
-                "làm việc",
-                "phụ trách",
-                "chữa",
-                "khám",
-            ]
+
             words = clean_name.split()
-            if not words or words[0].lower() in invalid_starts:
+            if not words:
                 return None
+
+            first_word = words[0]
+            if not first_word[0].isupper():
+                return None
+
+            invalid_starts = [
+                "cho", "nào", "tư vấn", "hãy", "giúp", "trực",
+                "khoa", "bệnh viện", "trung tâm", "đang", "công tác",
+                "làm việc", "phụ trách", "chữa", "khám",
+            ]
+            if first_word.lower() in invalid_starts:
+                return None
+
             if len(words) >= 2 and words[1].lower() in [
-                "công tác",
-                "làm việc",
-                "phụ trách",
+                "công tác", "làm việc", "phụ trách"
             ]:
                 return None
+
             if 2 <= len(words) <= 5:
-                if not any(
-                    k in clean_name.lower()
-                    for k in ["bạch mai", "trung tâm", "khoa", "bệnh viện", "phòng"]
-                ):
+                if not any(k in clean_name.lower()for k in ["bạch mai", "trung tâm", "khoa", "bệnh viện", "phòng"]):
                     return clean_name
+
         return None
 
     def _format_doctors_response(self, doctors: list[Doctor]) -> str:
         if not doctors:
             return "Không tìm thấy bác sĩ phù hợp với yêu cầu của bạn."
+
         lines = ["Danh sách bác sĩ phù hợp tại Bệnh viện Bạch Mai:"]
         for doc in doctors[:5]:
             s_name = doc.specialty.name if doc.specialty else "Đa Khoa"
@@ -1470,6 +1519,7 @@ Hãy trả lời câu hỏi: "{user_message}" một cách ân cần, ngắn gọ
         specialty = self._resolve_specialty(user_message, chat_history)
         max_fee = self._extract_max_fee(user_message)
         doctor_name = self._extract_doctor_name(user_message)
+        logger.info(f"=== LEGACY RESOLVE === specialty={specialty!r} max_fee={max_fee!r} doctor_name={doctor_name!r}")
 
         is_rag_query = any(k in msg_lower for k in RAG_KEYWORDS)
         context_rag = (
@@ -1477,6 +1527,7 @@ Hãy trả lời câu hỏi: "{user_message}" một cách ân cần, ngắn gọ
         )
 
         has_explicit_doctor_intent = any(k in msg_lower for k in DOCTOR_INTENT_KEYWORDS)
+        logger.info(f"  has_explicit_doctor_intent={has_explicit_doctor_intent}")
 
         doctor_query_intent = bool(
             max_fee or doctor_name or (specialty and has_explicit_doctor_intent)
@@ -1536,23 +1587,1358 @@ Hãy trả lời câu hỏi: "{user_message}" một cách ân cần, ngắn gọ
                 "Liên hệ hotline",
             ],
         }
+
+_last_availability: dict[int, dict] = {}
+
+class AgentChatService:
+    SYSTEM_PROMPT = """Bạn là trợ lý AI của Bệnh viện Bạch Mai, có quyền gọi các công cụ (tool) sau:
+
+    - search_doctors: tìm bác sĩ theo chuyên khoa / giá khám / tên bác sĩ.
+    - check_availability: xem lịch trống của MỘT bác sĩ cụ thể (cần doctor_id đã biết).
+    - list_specialties: liệt kê toàn bộ chuyên khoa của bệnh viện.
+    - book_appointment: ĐỀ XUẤT đặt một khung giờ khám (chỉ đề xuất, hệ thống sẽ hỏi xác nhận lại).
+
+    QUY TẮC BẮT BUỘC:
+    1. Khi người dùng muốn TÌM BÁC SĨ → GỌI search_doctors.
+    2. Khi người dùng muốn XEM LỊCH TRỐNG:
+       - NẾU đã có doctor_id trong lịch sử hội thoại → GỌI check_availability với doctor_id đó.
+       - NẾU CHƯA CÓ doctor_id → GỌI search_doctors TRƯỚC để tìm bác sĩ.
+    3. Khi người dùng muốn ĐẶT LỊCH:
+       - NẾU đã có slot_id → GỌI book_appointment.
+       - NẾU CHƯA CÓ slot_id → GỌI check_availability TRƯỚC.
+    4. KHÔNG BAO GIỜ tự bịa doctor_id hoặc slot_id.
+
+    QUY TẮC ĐỊNH DẠNG QUAN TRỌNG:
+    - Khi liệt kê bác sĩ từ kết quả search_doctors, LUÔN in kèm mã số dạng [#doctor_id]
+      ngay trước tên, ví dụ: "1. [#5] BSCK II. Đặng Minh Hải - Tim Mạch - 211,000 VND".
+    - Khi người dùng nhắc lại tên bác sĩ ở lượt sau, tìm số [#id] tương ứng trong lịch sử
+      hội thoại (không tự đoán số nếu không thấy).
+
+    QUY TẮC BẮT BUỘC:
+    - Khi người dùng hỏi tìm bác sĩ, LUÔN gọi search_doctors với tham số phù hợp.
+    - KHÔNG BAO GIỜ tự liệt kê tên bác sĩ hoặc ID nếu chưa nhận kết quả từ tool.
+    - KHÔNG BAO GIỜ tự sinh doctor_id — chỉ dùng ID từ kết quả tool.
+
+    LƯU Ý:
+    - "tim mach" (không dấu) = "Tim Mạch" (có dấu)
+    - Doctor ID là số nguyên từ kết quả search_doctors
+    """
+
+    BOOKING_SUCCESS_CLAIM_PATTERNS = [
+        "đã đặt lịch thành công",
+        "đặt lịch thành công",
+        "booking successful",
+        "đã xác nhận đặt lịch",
+        "lịch hẹn đã được tạo",
+    ]
+
+    MAX_TOOL_ROUNDS = 3
+    CONFIRM_KEYWORDS = [
+        "đồng ý",
+        "xác nhận",
+        "ok",
+        "oke",
+        "đặt luôn",
+        "chốt",
+        "được",
+        "vâng",
+        "yes",
+    ]
+    DECLINE_KEYWORDS = ["không", "hủy", "thôi", "để sau", "cancel"]
+
+    def __init__(
+        self,
+        specialty_detector: SpecialtyDetectionService,
+        doctor_search: DoctorSearchService,
+        rag_service: RAGService,
+        emergency_service: EmergencyService,
+        specialty_service: SpecialtyService,
+        appointment_service: AppointmentService,
+        patient_service: PatientService,
+        legacy_chat_service: AIChatService,
+    ):
+        self.specialty_detector = specialty_detector
+        self.doctor_search = doctor_search
+        self.rag_service = rag_service
+        self.emergency_service = emergency_service
+        self.specialty_service = specialty_service
+        self.appointment_service = appointment_service
+        self.patient_service = patient_service
+        self.legacy_chat_service = legacy_chat_service
+
+        # Dùng langchain_ollama (KHÔNG phải langchain_community)
+        self.llm = ChatOllama(
+            model=settings.OLLAMA_MODEL,
+            base_url=settings.OLLAMA_BASE_URL,
+            temperature=0.1,
+            stop=["<|im_end|>", "<|endoftext|>", "User:", "Human:"],
+        )
+
+    async def chat(
+        self,
+        session_id: int,
+        user_message: str,
+        chat_history: list[Any] | None,
+        current_user: User,
+    ) -> dict:
+        logger.info(f"\n{'='*60}\n>>> INCOMING: session={session_id} msg={user_message!r}\n{'='*60}")
+        msg_lower = user_message.lower()
+
+        # 1. Emergency check — GIỮ NGUYÊN
+        if self.emergency_service.check(msg_lower):
+            return {"reply": self.emergency_service.get_response(), "suggestions": []}
+
+        # 2. Pending booking check
+        pending = _pending_bookings.get(session_id)
+        if pending:
+            confirm_result = await self._handle_pending_confirmation(
+                session_id, msg_lower, pending, current_user
+            )
+            if confirm_result is not None:
+                return confirm_result
+            _pending_bookings.pop(session_id, None)
+
+        patient: Optional[Patient] = None
+        try:
+            patient = await self.patient_service.get_profile_by_user_id(current_user.id)
+        except ResourceNotFound:
+            logger.info(
+                "User %s chưa có hồ sơ Patient — tắt tool book_appointment",
+                current_user.id,
+            )
+
+        try:
+            result = await self._run_agent(
+                session_id, user_message, chat_history, current_user, patient
+            )
+            if result is not None:
+                return result
+        except Exception:
+            logger.exception(
+                "Agent pipeline thất bại, fallback về AIChatService legacy"
+            )
+
+        return await self.legacy_chat_service.chat(user_message, chat_history)
+
+    # -----------------------------------------------------------------
+    # PENDING BOOKING CONFIRMATION
+    # -----------------------------------------------------------------
+    async def _handle_pending_confirmation(
+        self,
+        session_id: int,
+        msg_lower: str,
+        pending: dict[str, Any],
+        current_user: User,
+    ) -> Optional[dict]:
+        if any(k in msg_lower for k in self.CONFIRM_KEYWORDS):
+            slot_id = pending["slot_id"]
+            try:
+                patient = await self.patient_service.get_profile_by_user_id(current_user.id)
+            except ResourceNotFound:
+                _pending_bookings.pop(session_id, None)
+                return {
+                    "reply": "Tài khoản của bạn chưa có hồ sơ bệnh nhân nên chưa thể đặt lịch. "
+                    "Vui lòng hoàn thiện hồ sơ trước khi đặt lịch khám.",
+                    "suggestions": ["Hoàn thiện hồ sơ", "Liên hệ hotline"],
+                }
+
+            try:
+                logger.info("=== EXECUTE TOOL: book_appointment ===")
+                logger.info(f"=== TOOL ARGS: slot_id={slot_id}, patient_id={patient.id} ===")
+
+                appointment = await self.appointment_service.create_appointment(
+                    patient=patient,
+                    appointment_data=AppointmentCreate(slot_id=slot_id),
+                )
+
+                logger.info(f"=== BOOKING RESULT: appointment_id={appointment.id}, status={appointment.status} ===")
+
+                _pending_bookings.pop(session_id, None)
+                return {
+                    "reply": (
+                        f"✅ Đã đặt lịch khám thành công (mã lịch hẹn #{appointment.id}). "
+                        "Bạn vui lòng đến trước giờ hẹn 15 phút để làm thủ tục."
+                    ),
+                    "suggestions": ["Xem lịch hẹn của tôi", "Đặt thêm lịch khác"],
+                }
+            except (ResourceNotFound, BadRequestException, ConflictException) as e:
+                _pending_bookings.pop(session_id, None)
+                logger.warning("Không thể đặt lịch: %s", e)
+                return {
+                    "reply": "Rất tiếc, không thể đặt lịch. Bạn muốn chọn khung giờ khác không?",
+                    "suggestions": ["Tìm khung giờ khác", "Tìm bác sĩ khác"],
+                }
+
+        if any(k in msg_lower for k in self.DECLINE_KEYWORDS):
+            _pending_bookings.pop(session_id, None)
+            return {
+                "reply": "Đã hủy đề xuất đặt lịch. Bạn cần mình hỗ trợ gì thêm không?",
+                "suggestions": ["Tìm bác sĩ khác", "Xem chuyên khoa"],
+            }
+
+        # Không rõ ý — hỏi lại, KHÔNG xóa pending
+        return {
+            "reply": (
+                f"Bạn có muốn xác nhận đặt khung giờ đã đề xuất (mã slot #{pending['slot_id']}) không? "
+                "Trả lời 'xác nhận' để đặt, hoặc 'hủy' nếu không muốn nữa."
+            ),
+            "suggestions": ["Xác nhận", "Hủy"],
+        }
+
+    def _has_small_doctor_ids(self, content: str) -> bool:
+        """Phát hiện doctor_id nhỏ bất thường (dưới 100) trong content — dấu hiệu hallucinate"""
+        if not content:
+            return False
+        # Tìm tất cả pattern [#số]
+        matches = re.findall(r'\[#(\d+)\]', content)
+
+        for match in matches:
+            doctor_id = int(match)
+            if doctor_id < 100:
+                logger.warning(f"  🚨 Phát hiện doctor_id nhỏ bất thường: #{doctor_id}")
+                return True
+
+        return False
+
+    def _claims_booking_success_without_tool(self, content: str, tool_calls: list) -> bool:
+        """Phát hiện LLM tự claim đặt lịch thành công mà không gọi tool"""
+        if tool_calls:
+            return False
+        if not content:
+            return False
+        content_lower = content.lower()
+
+        # FIX #2: Chỉ chặn khi claim THÀNH CÔNG, không chặn khi đang ĐỀ XUẤT
+        # Thêm các pattern "đề xuất" để loại trừ
+        proposal_patterns = [
+            "đề xuất",
+            "bạn có muốn",
+            "bạn xác nhận",
+            "bạn đồng ý",
+            "có muốn đặt",
+            "xác nhận đặt",
+        ]
+
+        # Nếu content chứa pattern đề xuất → KHÔNG phải claim success
+        if any(p in content_lower for p in proposal_patterns):
+            logger.info("  → Content là đề xuất, không phải claim success")
+            return False
+
+        # Kiểm tra claim success
+        return any(p in content_lower for p in self.BOOKING_SUCCESS_CLAIM_PATTERNS)
+
+
+    def _is_in_booking_flow(self, user_message: str) -> bool:
+        """Kiểm tra xem tin nhắn HIỆN TẠI có phải đang trả lời xác nhận/hủy/chọn slot không"""
+        logger.info(f"=== CHECK _is_in_booking_flow ===")
+        logger.info(f"  user_message: {user_message!r}")
+
+        content_lower = user_message.lower()
+
+        confirm_keywords = [
+            "xác nhận",
+            "đồng ý",
+            "đặt luôn",
+            "chốt",
+            "ok",
+            "oke",
+            "được",
+            "vâng",
+            "yes",
+        ]
+        decline_keywords = [
+            "hủy",
+            "thôi",
+            "để sau",
+            "cancel",
+            "đổi ý",
+        ]
+        slot_keywords = [
+            "khung giờ đầu tiên",
+            "slot",
+            "mã slot",
+            "khung giờ khám",
+            "khung giờ",
+        ]
+
+        all_keywords = confirm_keywords + decline_keywords + slot_keywords
+
+        for k in all_keywords:
+            if k in content_lower:
+                logger.info(f"  → True (khớp keyword {k!r} trong tin nhắn hiện tại)")
+                return True
+
+        logger.info("  → False (tin nhắn hiện tại không khớp keyword nào)")
+        return False
+
+    async def _verify_doctor_exists(self, doctor_id: int) -> bool:
+        """Kiểm tra bác sĩ có tồn tại trong DB không"""
+        try:
+            doctor = await self.doctor_search.doctor_repo.get_by_id(doctor_id)
+            return doctor is not None
+        except Exception:
+            return False
+
+    def _extract_doctor_name_from_history(
+        self, chat_history: list[Any] | None
+    ) -> str | None:
+        """Extract doctor_name từ lịch sử hội thoại"""
+        if not chat_history:
+            return None
+
+        # Tìm pattern "bác sĩ [Tên]" hoặc "BS [Tên]" trong 5 turn gần nhất
+
+        for turn in reversed(chat_history[-5:]):
+            content = (
+                turn.get("content", "")
+                if isinstance(turn, dict)
+                else getattr(turn, "content", "")
+            )
+            # Pattern: "bác sĩ X" hoặc "BS X" (X là tên, có thể có dấu)
+            matches = re.findall(
+                r"(?:bác sĩ|BS|bs)\s+([A-ZÀ-Ỹ][a-zà-ỹ]*(?:\s+[A-ZÀ-Ỹ][a-zà-ỹ]*)+)",
+                content,
+            )
+            if matches:
+                return matches[-1]  # Lấy tên gần nhất
+
+        return None
+
+    def _parse_doctor_id_from_history(
+        self, chat_history: list[Any] | None
+    ) -> int | None:
+        """Parse doctor_id từ pattern [#4228] — ưu tiên turn GẦN NHẤT, không dùng Counter"""
+        if not chat_history:
+            return None
+
+        # Duyệt từ turn gần nhất về cũ, lấy ID đầu tiên tìm thấy
+        for turn in reversed(chat_history[-10:]):
+            content = (
+                turn.get("content", "")
+                if isinstance(turn, dict)
+                else getattr(turn, "content", "")
+            )
+            matches = re.findall(r"\[#(\d{3,})\]", content)
+            if matches:
+                doctor_id = int(matches[-1])  # Lấy ID cuối cùng trong turn gần nhất
+                logger.info(f"  Parse doctor_id từ history (turn gần nhất): {doctor_id}")
+                return doctor_id
+
+        return None
+
+    AVAILABILITY_KEYWORDS = [
+        "xem lịch",
+        "lịch trống",
+        "khung giờ",
+        "còn lịch",
+        "lịch khám",
+    ]
+    DATE_PATTERN = r"(\d{1,2})/(\d{1,2})/(\d{4})"
+
+    SEARCH_DOCTOR_PATTERNS = [
+        r"tìm bác sĩ",
+        r"tim bac si",
+        r"bác sĩ chuyên khoa",
+        r"khám bác sĩ",
+        r"bác sĩ tên",
+        r"giá khám",
+        r"giá dưới",
+        r"đặt lịch khám",
+        r"đặt khám",
+        r"khám chuyên khoa",
+    ]
+
+    def _extract_availability_intent(
+        self, user_message: str, chat_history
+    ) -> dict | None:
+        """Deterministic: phát hiện intent xem lịch trống, không hỏi LLM"""
+
+        msg = user_message.lower()
+
+        date_match = re.search(self.DATE_PATTERN, user_message)
+        if not date_match:
+            return None
+
+        if not any(kw in msg for kw in self.AVAILABILITY_KEYWORDS):
+            return None
+
+        doctor_id = self._parse_doctor_id_from_message(user_message)
+        if not doctor_id:
+            doctor_id = self._parse_doctor_id_from_history(chat_history)
+
+        if not doctor_id:
+            return None
+
+        day, month, year = date_match.groups()
+        work_date = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+
+        logger.info(
+            f"  Availability intent detected: doctor_id={doctor_id}, work_date={work_date}"
+        )
+
+        return {
+            "doctor_id": doctor_id,
+            "work_date": work_date,
+        }
+
+    def _parse_doctor_id_from_message(self, user_message: str) -> int | None:
+        """Parse doctor_id trực tiếp từ message — pattern [#1234]"""
+
+        matches = re.findall(r"\[#(\d+)\]", user_message)
+        if matches:
+            return int(matches[-1])
+        return None
+
+    def _requires_tool_call(self, user_message: str) -> bool:
+        """Kiểm tra xem intent hiện tại có bắt buộc phải gọi tool không"""
+        msg = user_message.lower()
+
+        # Tìm bác sĩ → cần search_doctors
+        if any(re.search(p, msg) for p in self.SEARCH_DOCTOR_PATTERNS):
+            return True
+
+        # Xem lịch trống → cần check_availability
+        if any(kw in msg for kw in self.AVAILABILITY_KEYWORDS):
+            return True
+
+        # Đặt lịch → cần book_appointment hoặc search trước
+        if "đặt lịch" in msg or "đặt khám" in msg:
+            return True
+
+        return False
+
+    def _extract_search_intent(self, user_message: str) -> dict | None:
+        """Deterministic: không hỏi ý LLM có gọi tool hay không."""
+        msg = user_message.lower()
+        if not any(re.search(p, msg) for p in self.SEARCH_DOCTOR_PATTERNS):
+            return None
+
+        # Tách specialty_name — pass-through nguyên văn, không validate
+        specialty_name = self._extract_specialty_from_message(user_message)
+        # Tách doctor_name — FIX #3: Chỉ gán nếu có pattern rõ ràng
+        doctor_name = self._extract_doctor_name_from_message(user_message)
+
+        # FIX #3: Nếu doctor_name trùng với specialty_name → bỏ doctor_name
+        # (trường hợp "Tìm bác sĩ Hô Hấp" — "Hô Hấp" là specialty, không phải tên)
+        if doctor_name and specialty_name and doctor_name.lower() == specialty_name.lower():
+            logger.info(f"  Doctor name '{doctor_name}' trùng specialty — bỏ doctor_name")
+            doctor_name = None
+        # Tách max_fee
+        max_fee = self._extract_max_fee_from_message(user_message)
+
+        # Nếu không tách được specialty từ "chuyên khoa X" pattern,
+        # thử tách từ "khám X" hoặc "đặt lịch khám X"
+        if not specialty_name and not doctor_name:
+            msg_lower = user_message.lower()
+            if not re.search(r"giá\s+khám|giá\s+dưới|giá\s+trên", msg_lower):
+                specialty_match = re.search(
+                    r"(?:khám|đặt lịch khám)\s+(?:chuyên khoa\s+)?([^\d,.!?]+)",
+                    msg_lower,
+                )
+                if specialty_match:
+                    candidate = specialty_match.group(1).strip()
+                    phrase_stopwords = ["bác sĩ", "bs "]
+                    word_stopwords = {
+                        "giá",
+                        "dưới",
+                        "trên",
+                        "nghìn",
+                        "đồng",
+                        "vnd",
+                        "tiền",
+                        "tên",
+                    }
+                    candidate_words = set(candidate.split())
+                    has_phrase_stopword = any(p in candidate for p in phrase_stopwords)
+                    has_word_stopword = bool(
+                        candidate_words.intersection(word_stopwords)
+                    )
+                    if (
+                        candidate not in word_stopwords
+                        and not has_phrase_stopword
+                        and not has_word_stopword
+                    ):
+                        specialty_name = candidate
+
+        logger.info(f"  Search intent parsed: specialty={specialty_name!r} doctor={doctor_name!r} fee={max_fee!r}")
+
+        return {
+            "specialty_name": specialty_name,
+            "doctor_name": doctor_name,
+            "max_fee": max_fee,
+        }
+
+    def _extract_specialty_from_message(self, user_message: str) -> str | None:
+        """Tách specialty từ message — tổng quát, pass-through nguyên văn"""
+
+        msg = user_message.strip()
+
+        # Pattern 1: "chuyên khoa X" — bắt MỌI cụm sau "chuyên khoa"
+        spec_match = re.search(r"chuyên khoa\s+([^\d,.!?]+)", msg, re.IGNORECASE)
+        if spec_match:
+            result = spec_match.group(1).strip()
+            if result:
+                return result
+
+        # Pattern 2: "tim mach" / "tim mạch" — fuzzy không dấu
+        if re.search(r"tim\s*m[ạa]ch", msg, re.IGNORECASE):
+            return "Tim Mạch"
+
+        # Fallback: dùng specialty_detector
+        return self.specialty_detector.detect(user_message)
+
+    def _extract_doctor_name_from_message(self, user_message: str) -> str | None:
+        """Tách doctor_name từ message — chỉ bắt khi có 'tên' hoặc 'bác sĩ' rõ ràng"""
+        msg = user_message.strip()
+
+        # Pattern 1: "tên X" — bắt cụm sau "tên" cho đến dấu câu
+        name_match = re.search(r"tên\s+([^\d,.!?]+)", msg, re.IGNORECASE)
+        if name_match:
+            result = name_match.group(1).strip()
+            if result:
+                return result
+
+        # Pattern 2: "bác sĩ X" hoặc "BS X" — phải có họ tên đầy đủ (2 từ trở lên)
+        patterns = [
+            r"(?:bác sĩ|BS)\s+([A-ZÀ-Ỹ][a-zà-ỹ]+(?:\s+[A-ZÀ-Ỹ][a-zà-ỹ]+)+)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, msg)
+            if match:
+                return match.group(1).strip()
+
+        # FIX #3: KHÔNG bắt specialty làm doctor_name
+        # Chỉ return khi có pattern rõ ràng, không dùng fallback khác
+        return None
+
+    def _extract_max_fee_from_message(self, user_message: str) -> float | None:
+        """Tách max_fee từ message"""
+        msg = user_message.lower()
+
+        # Pattern: "dưới X nghìn/k"
+        fee_match = re.search(r"dưới\s+(\d+)\s*(nghìn|ngàn|k)?", msg)
+        if fee_match:
+            val = int(fee_match.group(1))
+            if fee_match.group(2):
+                val *= 1000
+            return float(val)
+
+        generic_fee = re.search(r"(\d+)\s*(?:nghìn|ngàn|k)", msg)
+        if generic_fee:
+            return float(int(generic_fee.group(1)) * 1000)
+
+        return None
+
+    async def _find_doctor_id_by_name(self, doctor_name: str) -> int | None:
+        """Tìm doctor_id từ tên bác sĩ"""
+        try:
+            doctors, found = await self.doctor_search.search(doctor_name=doctor_name)
+            if found and doctors:
+                return doctors[0].id
+        except Exception:
+            pass
+        return None
+
+    # -----------------------------------------------------------------
+    # BUILD TOOLS — DÙNG StructuredTool
+    # -----------------------------------------------------------------
+    def _build_tools(self, has_patient: bool) -> list:
+        """Build tools dùng StructuredTool (format tối ưu đã test)"""
+        tools = [
+            StructuredTool.from_function(
+                func=lambda **kwargs: None,
+                name="search_doctors",
+                description="Tìm bác sĩ theo chuyên khoa, giá khám tối đa, hoặc tên bác sĩ.",
+                args_schema=SearchDoctorsInput,
+            ),
+            StructuredTool.from_function(
+                func=lambda **kwargs: None,
+                name="check_availability",
+                description="Xem các khung giờ trống của một bác sĩ cụ thể theo ngày.",
+                args_schema=CheckAvailabilityInput,
+            ),
+            StructuredTool.from_function(
+                func=lambda **kwargs: None,
+                name="list_specialties",
+                description="Liệt kê tất cả chuyên khoa hiện có của bệnh viện.",
+                args_schema=ListSpecialtiesInput,
+            ),
+        ]
+
+        if has_patient:
+            tools.append(
+                StructuredTool.from_function(
+                    func=lambda **kwargs: None,
+                    name="book_appointment",
+                    description="Đề xuất đặt một khung giờ khám cụ thể (chưa đặt thật, chỉ đề xuất để người dùng xác nhận).",
+                    args_schema=BookAppointmentInput,
+                )
+            )
+
+        return tools
+
+    # -----------------------------------------------------------------
+    # HISTORY TO MESSAGES
+    # -----------------------------------------------------------------
+    def _history_to_messages(self, chat_history: list[Any] | None) -> list:
+        messages: list = [SystemMessage(content=self.SYSTEM_PROMPT)]
+
+        if chat_history:
+            for turn in chat_history[-6:]:
+                role = (
+                    turn.get("role")
+                    if isinstance(turn, dict)
+                    else getattr(turn, "role", "user")
+                )
+                content = (
+                    turn.get("content")
+                    if isinstance(turn, dict)
+                    else getattr(turn, "content", "")
+                )
+                if role == "assistant":
+                    messages.append(AIMessage(content=content))
+                else:
+                    messages.append(HumanMessage(content=content))
+        return messages
+
+    # -----------------------------------------------------------------
+    # AGENT LOOP — ĐÃ SỬA LỖI FALLBACK THEO VÒNG
+    # -----------------------------------------------------------------
+    async def _run_agent(
+        self, session_id, user_message, chat_history, current_user, patient
+    ):
+        tools = self._build_tools(has_patient=patient is not None)
+        llm_with_tools = self.llm.bind_tools(tools)
+
+        messages = self._history_to_messages(chat_history)
+        messages.append(HumanMessage(content=user_message))
+
+        availability_intent = self._extract_availability_intent(user_message, chat_history)
+        if availability_intent:
+            logger.info(f"=== DETERMINISTIC ROUTING: Availability intent detected: {availability_intent} ===")
+            tool_result = await self._execute_read_tool("check_availability", availability_intent, chat_history)
+
+            if tool_result.get("error"):
+                return {
+                    "reply": tool_result["error"],
+                    "suggestions": ["Tìm bác sĩ khác", "Liên hệ hotline"],
+                }
+
+            # FIX: Lưu context để dùng cho bước đặt lịch sau này
+            _last_availability[session_id] = {
+                "doctor_id": tool_result.get("doctor_id"),
+                "work_date": tool_result.get("work_date"),
+                "slots": [
+                    {"slot_id": s["slot_id"], "start_time": s["start_time"], "end_time": s["end_time"]}
+                    for s in tool_result.get("available_slots", [])
+                ],
+            }
+            logger.info(f"  Đã lưu _last_availability: doctor_id={_last_availability[session_id]['doctor_id']}, slots={len(_last_availability[session_id]['slots'])}")
+
+            slots = tool_result.get("available_slots", [])
+            doctor_name = tool_result.get("doctor_name", f"Bác sĩ #{tool_result.get('doctor_id')}")
+            work_date = tool_result.get("work_date", "")
+
+            if not slots:
+                return {
+                    "reply": f"{doctor_name} không có lịch trống vào ngày {work_date}. Bạn có thể chọn ngày khác hoặc bác sĩ khác.",
+                    "suggestions": ["Tìm bác sĩ khác", "Xem chuyên khoa"],
+                }
+
+            # Format danh sách slot thật
+            formatted_slots = []
+            for idx, slot in enumerate(slots, 1):
+                formatted_slots.append(
+                    f"{idx}. Khung giờ #{slot['slot_id']}: {slot['start_time']} - {slot['end_time']}"
+                )
+            slots_text = "\n".join(formatted_slots)
+
+            return {
+                "reply": f"{doctor_name} có các khung giờ trống ngày {work_date}:\n\n{slots_text}\n\nBạn muốn đặt khung giờ nào?",
+                "suggestions": ["Đặt khung giờ đầu tiên", "Chọn bác sĩ khác"],
+            }
+        search_intent = self._extract_search_intent(user_message)
+        if search_intent:
+            logger.info(
+                f"=== DETERMINISTIC ROUTING: Search intent detected: {search_intent} ==="
+            )
+            tool_result = await self._execute_read_tool(
+                "search_doctors", search_intent, chat_history
+            )
+
+            if tool_result.get("found"):
+                # Dùng formatted_text trực tiếp, không qua LLM
+                return {
+                    "reply": tool_result["formatted_text"],
+                    "suggestions": ["Xem lịch trống", "Đặt lịch khám"],
+                }
+            else:
+                # Không tìm thấy — thông báo rõ ràng
+                message = tool_result.get("message", "Không tìm thấy bác sĩ phù hợp.")
+                logger.info(f"  Search không tìm thấy: {message}")
+                return {
+                    "reply": message,
+                    "suggestions": ["Tìm bác sĩ khác", "Xem chuyên khoa", "Liên hệ hotline"],
+                }
+        # LOG: Bắt đầu agent loop
+        logger.info("=" * 60)
+        logger.info(f"AGENT LOOP BẮT ĐẦU - User: {current_user.username}")
+        logger.info(f"Message: {user_message}")
+        logger.info(f"Tools available: {[t.name for t in tools]}")
+        logger.info("=" * 60)
+
+        for _round in range(self.MAX_TOOL_ROUNDS):
+            try:
+                ai_response: AIMessage = await asyncio.wait_for(
+                    llm_with_tools.ainvoke(messages), timeout=60.0
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"LLM timeout sau 60s ở round {_round + 1}")
+                if _round == 0:
+                    return await self.legacy_chat_service.chat(
+                        user_message, chat_history
+                    )
+                else:
+                    return {
+                        "reply": "Xin lỗi, hệ thống đang quá tải. Bạn vui lòng thử lại sau ít phút.",
+                        "suggestions": ["Thử lại", "Liên hệ hotline"],
+                    }
+            tool_calls = getattr(ai_response, "tool_calls", None) or []
+
+            # FIX: Kiểm tra booking flow TRƯỚC khi guard claim success
+            if not tool_calls and self._is_in_booking_flow(user_message):
+                logger.info("  → Đang trong booking flow, xử lý deterministic")
+                # Không chặn ở đây — sẽ xử lý ở block bên dưới
+                pass
+            elif self._claims_booking_success_without_tool(
+                    getattr(ai_response, "content", ""), tool_calls
+            ):
+                logger.error("  🚨 LLM claim đặt lịch thành công nhưng KHÔNG gọi tool — chặn lại")
+                return {
+                    "reply": "Xin lỗi, tôi chưa thể xác nhận đặt lịch. Vui lòng thử lại yêu cầu đặt lịch.",
+                    "suggestions": ["Xem lịch trống", "Tìm bác sĩ"],
+                }
+
+            # LOG: Kết quả LLM
+            logger.info(f"Round {_round + 1}:")
+            logger.info(
+                f"  Content: {ai_response.content[:100] if ai_response.content else 'None'}"
+            )
+            logger.info(f"  Tool calls: {len(tool_calls)}")
+
+            for call in tool_calls:
+                logger.info(f"    → {call['name']}({call.get('args', {})})")
+
+            if not tool_calls and _round == 0:
+                # Thử retry 1 lần với system prompt nhắc mạnh hơn
+                logger.warning(
+                    "  → LLM không gọi tool ở round 0, retry với prompt mạnh hơn"
+                )
+                retry_messages = messages + [
+                    SystemMessage(
+                        content="BẮT BUỘC: Bạn phải gọi một tool phù hợp. "
+                        "Nếu người dùng muốn tìm bác sĩ, gọi search_doctors. "
+                        "Nếu muốn xem lịch, gọi check_availability. "
+                        "Nếu muốn đặt lịch, gọi book_appointment. "
+                        "KHÔNG trả lời trực tiếp nếu có thể dùng tool."
+                    )
+                ]
+                try:
+                    retry_response = await asyncio.wait_for(
+                        llm_with_tools.ainvoke(retry_messages), timeout=60.0
+                    )
+                    retry_tool_calls = getattr(retry_response, "tool_calls", None) or []
+
+                    if retry_tool_calls:
+                        logger.info(
+                            f"  ✅ Retry thành công: LLM gọi {len(retry_tool_calls)} tool"
+                        )
+                        ai_response = retry_response
+                        tool_calls = retry_tool_calls
+                        messages = retry_messages
+                    else:
+                        logger.warning("  ❌ Retry vẫn không gọi tool")
+                        # Rơi xuống xử lý bên dưới
+                except asyncio.TimeoutError:
+                    logger.error("  ❌ Retry timeout")
+                    # Rơi xuống xử lý bên dưới
+
+            if not tool_calls:
+                if _round == 0:
+                    # Kiểm tra xem có đang giữa flow đặt lịch không
+                    if self._is_in_booking_flow(user_message):
+                        logger.warning("  → Đang giữa flow đặt lịch, xử lý trực tiếp")
+
+                        msg_lower = user_message.lower()
+
+                        # Xử lý HỦY
+                        if any(
+                            k in msg_lower for k in ["hủy", "thôi", "cancel", "đổi ý"]
+                        ):
+                            _pending_bookings.pop(session_id, None)
+                            return {
+                                "reply": "Đã hủy đề xuất đặt lịch. Bạn cần mình hỗ trợ gì thêm không?",
+                                "suggestions": ["Tìm bác sĩ khác", "Xem chuyên khoa"],
+                            }
+
+                        # Xử lý XÁC NHẬN
+                        if any(
+                            k in msg_lower
+                            for k in [
+                                "xác nhận",
+                                "đồng ý",
+                                "đặt luôn",
+                                "chốt",
+                                "ok",
+                                "oke",
+                                "được",
+                                "vâng",
+                                "yes",
+                            ]
+                        ):
+                            pending = _pending_bookings.get(session_id)
+                            if pending:
+                                confirm_result = (
+                                    await self._handle_pending_confirmation(
+                                        session_id, msg_lower, pending, current_user
+                                    )
+                                )
+                                if confirm_result is not None:
+                                    return confirm_result
+                                _pending_bookings.pop(session_id, None)
+                            else:
+                                return {
+                                    "reply": "Bạn muốn xác nhận đặt lịch nào? Hiện tại chưa có đề xuất nào đang chờ.",
+                                    "suggestions": [
+                                        "Tìm bác sĩ",
+                                        "Xem lịch trống",
+                                        "Đặt lịch khám",
+                                    ],
+                                }
+                        # Xử lý CHỌN KHUNG GIỜ
+                        if any(k in msg_lower for k in ["khung giờ", "slot"]):
+                            # Parse slot_id TRỰC TIẾP từ message trước
+                            slot_id_match = re.search(r"#(\d+)", user_message)
+                            if slot_id_match:
+                                requested_slot_id = int(slot_id_match.group(1))
+                                logger.info(
+                                    f"  User chỉ định slot_id={requested_slot_id}"
+                                )
+                            else:
+                                requested_slot_id = None
+
+                            # NẾU CÓ slot_id → tra thẳng DB, không cần đoán work_date
+                            if requested_slot_id:
+                                logger.info(
+                                    f"  Tra DB trực tiếp slot_id={requested_slot_id}..."
+                                )
+                                slot_info = await self.appointment_service.appointment_repo.get_slot_with_doctor(
+                                    requested_slot_id
+                                )
+
+                                if not slot_info:
+                                    return {
+                                        "reply": f"Khung giờ #{requested_slot_id} không tồn tại. Bạn vui lòng chọn khung giờ khác.",
+                                        "suggestions": [
+                                            "Xem lịch trống",
+                                            "Tìm bác sĩ khác",
+                                        ],
+                                    }
+
+                                if slot_info["status"] != ScheduleSlotStatus.AVAILABLE:
+                                    return {
+                                        "reply": f"Khung giờ #{requested_slot_id} không còn trống. Bạn vui lòng chọn khung giờ khác.",
+                                        "suggestions": [
+                                            "Xem lịch trống",
+                                            "Chọn khung giờ khác",
+                                        ],
+                                    }
+
+                                doctor_id = slot_info["doctor_id"]
+                                start_time = slot_info["start_time"]
+
+                                _pending_bookings[session_id] = {
+                                    "slot_id": requested_slot_id,
+                                    "reason": None,
+                                }
+
+                                logger.info(
+                                    f"  ✅ Tìm thấy slot #{requested_slot_id}: doctor_id={doctor_id}, start_time={start_time}"
+                                )
+                                return {
+                                    "reply": f"Bạn muốn đặt khung giờ {start_time} (mã slot #{requested_slot_id}) "
+                                    f"với bác sĩ [#{doctor_id}]? Vui lòng xác nhận để hoàn tất đặt lịch.",
+                                    "suggestions": ["Xác nhận đặt lịch", "Hủy bỏ"],
+                                }
+
+                            # KHÔNG CÓ slot_id → dùng _last_availability
+                            last_ctx = _last_availability.get(session_id)
+                            if last_ctx:
+                                logger.info(
+                                    f"  Sử dụng _last_availability: doctor_id={last_ctx['doctor_id']}, work_date={last_ctx['work_date']}"
+                                )
+                                doctor_id = last_ctx["doctor_id"]
+                                work_date = last_ctx["work_date"]
+                                slots = last_ctx.get("slots", [])
+                            else:
+                                # Fallback: parse từ message/history
+                                doctor_id = self._parse_doctor_id_from_message(
+                                    user_message
+                                )
+                                if not doctor_id:
+                                    doctor_id = self._parse_doctor_id_from_history(
+                                        chat_history
+                                    )
+                                work_date = "2026-09-15"  # TODO: Cần lấy từ context
+                                slots = []
+
+                            if not doctor_id:
+                                return {
+                                    "reply": "Bạn vui lòng chọn bác sĩ trước, sau đó mình sẽ xem lịch trống và đề xuất khung giờ phù hợp.",
+                                    "suggestions": [
+                                        "Tìm bác sĩ",
+                                        "Xem chuyên khoa",
+                                    ],
+                                }
+
+                            # Nếu có slots từ context → dùng luôn
+                            if slots:
+                                selected_slot = slots[0]
+                                slot_id = selected_slot["slot_id"]
+                                start_time = selected_slot["start_time"]
+
+                                _pending_bookings[session_id] = {
+                                    "slot_id": slot_id,
+                                    "reason": None,
+                                }
+
+                                return {
+                                    "reply": f"Bạn muốn đặt khung giờ {start_time} (mã slot #{slot_id}) với bác sĩ [#{doctor_id}]? "
+                                    f"Vui lòng xác nhận để hoàn tất đặt lịch.",
+                                    "suggestions": ["Xác nhận đặt lịch", "Hủy bỏ"],
+                                }
+
+                            # Nếu không có slots trong context → gọi check_availability
+                            try:
+                                availability_result = await self._execute_read_tool(
+                                    "check_availability",
+                                    {"doctor_id": doctor_id, "work_date": work_date},
+                                    chat_history,
+                                )
+
+                                slots = availability_result.get("available_slots", [])
+                                if not slots:
+                                    return {
+                                        "reply": f"Bác sĩ [#{doctor_id}] không có khung giờ trống. Bạn muốn chọn ngày khác hoặc bác sĩ khác không?",
+                                        "suggestions": ["Tìm bác sĩ khác", "Xem chuyên khoa"],
+                                    }
+
+                                # Lưu context cho lần sau
+                                _last_availability[session_id] = {
+                                    "doctor_id": doctor_id,
+                                    "work_date": work_date,
+                                    "slots": [
+                                        {"slot_id": s["slot_id"], "start_time": s["start_time"], "end_time": s["end_time"]}
+                                        for s in slots
+                                    ],
+                                }
+
+                                selected_slot = slots[0]
+                                slot_id = selected_slot["slot_id"]
+                                start_time = selected_slot["start_time"]
+
+                                _pending_bookings[session_id] = {
+                                    "slot_id": slot_id,
+                                    "reason": None,
+                                }
+
+                                return {
+                                    "reply": f"Bạn muốn đặt khung giờ {start_time} (mã slot #{slot_id}) với bác sĩ [#{doctor_id}]? "
+                                             f"Vui lòng xác nhận để hoàn tất đặt lịch.",
+                                    "suggestions": ["Xác nhận đặt lịch", "Hủy bỏ"],
+                                }
+                            except Exception as e:
+                                logger.exception("Lỗi khi gọi check_availability trong booking flow")
+                                return {
+                                    "reply": "Có lỗi khi kiểm tra lịch trống. Bạn vui lòng thử lại sau.",
+                                    "suggestions": ["Tìm bác sĩ khác", "Liên hệ hotline"],
+                                }
+                            try:
+                                availability_result = (
+                                    await self._execute_read_tool(
+                                        "check_availability",
+                                        {
+                                            "doctor_id": doctor_id,
+                                            "work_date": "2026-09-15",
+                                        },
+                                        chat_history,
+                                    )
+                                )
+
+                                slots = availability_result.get(
+                                    "available_slots", []
+                                )
+                                if not slots:
+                                    return {
+                                        "reply": f"Bác sĩ [#{doctor_id}] không có khung giờ trống vào ngày 15/09/2026. Bạn muốn chọn ngày khác hoặc bác sĩ khác không?",
+                                        "suggestions": [
+                                            "Tìm bác sĩ khác",
+                                            "Xem chuyên khoa",
+                                        ],
+                                    }
+
+                                selected_slot = None
+                                if requested_slot_id:
+                                    for slot in slots:
+                                        if slot["slot_id"] == requested_slot_id:
+                                            selected_slot = slot
+                                            break
+                                    if not selected_slot:
+                                        return {
+                                            "reply": f"Khung giờ #{requested_slot_id} không còn trống hoặc không tồn tại. Bạn vui lòng chọn khung giờ khác.",
+                                            "suggestions": ["Xem lịch trống", "Chọn khung giờ khác"],
+                                        }
+                                else:
+                                    selected_slot = slots[0]
+
+                                slot_id = selected_slot["slot_id"]
+                                start_time = selected_slot["start_time"]
+
+                                _pending_bookings[session_id] = {
+                                    "slot_id": slot_id,
+                                    "reason": None,
+                                }
+
+                                return {
+                                    "reply": f"Bạn muốn đặt khung giờ {start_time} (mã slot #{slot_id}) với bác sĩ [#{doctor_id}]? "
+                                             f"Vui lòng xác nhận để hoàn tất đặt lịch.",
+                                    "suggestions": ["Xác nhận đặt lịch", "Hủy bỏ"],
+                                }
+                            except Exception as e:
+                                logger.exception("Lỗi khi gọi check_availability trong booking flow")
+                                return {
+                                    "reply": "Có lỗi khi kiểm tra lịch trống. Bạn vui lòng thử lại sau.",
+                                    "suggestions": ["Tìm bác sĩ khác", "Liên hệ hotline"],
+                                }
+
+                    # Nếu LLM đã tự trả lời hợp lý (có content), dùng luôn thay vì fallback
+                    if ai_response.content and len(ai_response.content.strip()) > 10:
+                        # Kiểm tra content có chứa ID nhỏ bất thường không (hallucinate)
+                        content_with_small_ids = self._has_small_doctor_ids(ai_response.content)
+                        if content_with_small_ids:
+                            logger.warning(f"  → Content chứa doctor_id nhỏ bất thường, có thể hallucinate — fallback legacy")
+                            return await self.legacy_chat_service.chat(user_message, chat_history)
+
+                        # Kiểm tra xem intent hiện tại có cần dữ liệu thật không
+                        # Nếu cần → không dùng content trực tiếp, phải gọi tool
+                        if self._requires_tool_call(user_message):
+                            logger.error(f"  🚨 Intent cần tool nhưng LLM không gọi — từ chối thay vì dùng content bịa")
+                            return {
+                                "reply": "Xin lỗi, tôi chưa lấy được thông tin chính xác. Bạn vui lòng thử lại.",
+                                "suggestions": ["Thử lại", "Liên hệ hotline"],
+                            }
+
+                        logger.info("  → LLM không gọi tool nhưng có content hợp lệ, dùng trực tiếp")
+                        return {
+                            "reply": ai_response.content,
+                            "suggestions": ["Tìm bác sĩ khác", "Xem chuyên khoa", "Đặt lịch khám"],
+                        }
+                else:
+                    logger.info("  → LLM tổng hợp kết quả (không cần thêm tool)")
+                    return {
+                        "reply": ai_response.content or "Mình đã tìm được thông tin.",
+                        "suggestions": ["Đặt lịch khám", "Xem quy trình khám bệnh"],
+                    }
+
+            messages.append(ai_response)
+
+            proposal_result = None
+            for call in tool_calls:
+                tool_name = call["name"]
+                tool_args = call.get("args", {}) or {}
+                call_id = call.get("id", tool_name)
+
+                if tool_name == "book_appointment":
+                    # Validate args trước khi xử lý
+                    try:
+                        validated = BookAppointmentInput(**tool_args)
+                        proposal_result = await self._propose_booking(
+                            session_id, validated.model_dump()
+                        )
+                    except ValidationError:
+                        # Log lỗi kỹ thuật ở server
+                        logger.warning("Invalid booking args: %s", tool_args)
+                        # Trả message thân thiện cho user
+                        proposal_result = {
+                            "reply": "Thông tin đặt lịch chưa hợp lệ, bạn vui lòng chọn lại khung giờ.",
+                            "suggestions": ["Xem lịch trống bác sĩ", "Tìm bác sĩ khác"],
+                        }
+
+                    messages.append(
+                        ToolMessage(
+                            content=json.dumps(
+                                {"status": "proposed"}, ensure_ascii=False
+                            ),
+                            tool_call_id=call_id,
+                        )
+                    )
+                    continue
+
+                try:
+                    tool_result = await self._execute_read_tool(tool_name, tool_args, chat_history)
+                except Exception:
+                    logger.exception("Tool %s lỗi với args %s", tool_name, tool_args)
+                    tool_result = {"error": "Không lấy được dữ liệu, vui lòng thử lại."}
+
+                    # Nếu là search_doctors và tìm thấy, trả thẳng formatted_text không qua LLM
+                if tool_name == "search_doctors" and tool_result.get("found"):
+                    return {
+                        "reply": tool_result["formatted_text"],
+                        "suggestions": ["Xem lịch trống", "Đặt lịch khám"],
+                    }
+
+                messages.append(
+                    ToolMessage(
+                        content=json.dumps(
+                            tool_result, ensure_ascii=False, default=str
+                        ),
+                        tool_call_id=call_id,
+                    )
+                )
+
+            if proposal_result is not None:
+                # book_appointment là bước cuối — trả lời ngay bằng đề xuất
+                return proposal_result
+
+        # Hết số vòng — sinh câu trả lời cuối từ tool data đã thu thập
+        try:
+            final = await asyncio.wait_for(
+                self.llm.ainvoke(messages),
+                timeout=60.0
+            )
+            final_content = final.content if hasattr(final, "content") else ""
+        except asyncio.TimeoutError:
+            logger.error("LLM timeout ở lượt tổng hợp cuối")
+            final_content = ""
+
+        return {
+            "reply": final_content
+            or "Mình đã tìm được thông tin, bạn cần hỗ trợ thêm gì không?",
+            "suggestions": [
+                "Đặt lịch khám",
+                "Xem quy trình khám bệnh",
+                "Liên hệ hotline",
+            ],
+        }
+
+    # -----------------------------------------------------------------
+    # TOOL EXECUTION (READ ONLY — an toàn)
+    # -----------------------------------------------------------------
+    async def _execute_read_tool(self, tool_name: str, args: dict, chat_history: list[Any] | None = None) -> Any:
+        logger.info(f"=== EXECUTE TOOL: {tool_name} ===")
+        logger.info(f"=== TOOL ARGS: {args} ===")
+
+        if tool_name == "search_doctors":
+            try:
+                validated = SearchDoctorsInput(**args)
+            except ValidationError:
+                logger.warning("Invalid search args: %s", args)
+                return {"error": "Thông tin tìm kiếm chưa hợp lệ."}
+
+            doctors, found = await self.doctor_search.search(
+                specialty_name=validated.specialty_name,
+                max_fee=validated.max_fee,
+                doctor_name=validated.doctor_name,
+            )
+
+            if not found:
+                # Tạo message chi tiết hơn
+                if validated.specialty_name:
+                    message = f"Không tìm thấy bác sĩ thuộc chuyên khoa '{validated.specialty_name}'."
+                elif validated.doctor_name:
+                    message = f"Không tìm thấy bác sĩ tên '{validated.doctor_name}'."
+                elif validated.max_fee:
+                    message = f"Không tìm thấy bác sĩ có giá khám dưới {validated.max_fee:,.0f} VND."
+                else:
+                    message = "Không tìm thấy bác sĩ phù hợp."
+                return {"found": False, "message": message}
+
+            # FIX: Trả về format rõ ràng với doctor_id
+            doctors_list = []
+            for idx, d in enumerate(doctors, 1):
+                doctors_list.append(
+                    {
+                        "stt": idx,
+                        "doctor_id": d.id,
+                        "name": d.user.full_name if d.user else f"Bác sĩ #{d.id}",
+                        "specialty": d.specialty.name if d.specialty else "Đa Khoa",
+                        "fee": float(d.consultation_fee) if d.consultation_fee else 0.0,
+                    }
+                )
+
+            formatted_lines = []
+            for idx, d in enumerate(doctors_list, 1):
+                formatted_lines.append(
+                    f"{idx}. Bác sĩ [#{d['doctor_id']}] {d['name']} - {d['specialty']} - "
+                    f"{d['fee']:,.0f} VND".replace(",", ".")
+                )
+            formatted_text = "\n".join(formatted_lines)
+
+            return {
+                "found": True,
+                "doctors": doctors_list,
+                "formatted_text": formatted_text,
+            }
+
+        if tool_name == "check_availability":
+            # Validate args
+            try:
+                validated = CheckAvailabilityInput(**args)
+            except ValidationError:
+                logger.warning("Invalid availability args: %s", args)
+                return {"error": "Thông tin kiểm tra lịch chưa hợp lệ."}
+
+            try:
+                work_date = date.fromisoformat(validated.work_date)
+            except ValueError:
+                return {"error": "Ngày không hợp lệ, cần định dạng YYYY-MM-DD."}
+
+                # VALIDATE doctor_id: Nếu LLM trả về ID không tồn tại, thử tìm từ history
+            doctor_id = validated.doctor_id
+            doctor_exists = await self._verify_doctor_exists(doctor_id)
+
+            if not doctor_exists:
+                logger.warning(f"Doctor ID {doctor_id} không tồn tại, thử parse từ history")
+
+                # Parse doctor_id từ chat_history (pattern [#4228])
+                doctor_id_from_history = self._parse_doctor_id_from_history(chat_history)
+
+                if doctor_id_from_history:
+                    logger.info(f"Đã tìm thấy doctor_id={doctor_id_from_history} từ history")
+                    doctor_id = doctor_id_from_history
+                else:
+                    # Thử tìm theo tên
+                    doctor_name_from_history = self._extract_doctor_name_from_history(chat_history)
+                    if doctor_name_from_history:
+                        corrected_id = await self._find_doctor_id_by_name(doctor_name_from_history)
+                        if corrected_id:
+                            logger.info(f"Đã tìm thấy doctor_id={corrected_id} cho tên '{doctor_name_from_history}'")
+                            doctor_id = corrected_id
+                        else:
+                            return {"error": f"Không tìm thấy bác sĩ với tên '{doctor_name_from_history}'."}
+                    else:
+                        return {"error": "Không tìm thấy bác sĩ với ID đã cho."}
+
+            # ĐÚNG: Truyền doctor_id và work_date riêng biệt
+            data = await self.appointment_service.get_doctor_availability(
+                doctor_id=doctor_id,
+                work_date=work_date,
+            )
+            slots = data.get("available_slots", [])
+            return {
+                "doctor_id": data["doctor_id"],
+                "doctor_name": data["doctor_name"],
+                "specialty": data["specialty"],
+                "work_date": str(data["work_date"]),
+                "available_slots": [
+                    {
+                        "slot_id": s.id,
+                        "start_time": str(getattr(s, "start_time", "")),
+                        "end_time": str(getattr(s, "end_time", "")),
+                    }
+                    for s in slots
+                ],
+            }
+
+        if tool_name == "list_specialties":
+            specialties: list[
+                Specialty
+            ] = await self.specialty_service.get_specialties()
+            return {
+                "specialties": [
+                    {
+                        "id": s.id,
+                        "name": s.name,
+                        "description": getattr(s, "description", None),
+                    }
+                    for s in specialties
+                ]
+            }
+
+        raise ValueError(f"Tool không xác định: {tool_name}")
+
+    # -----------------------------------------------------------------
+    # BOOK APPOINTMENT PROPOSAL — CHỈ ĐỀ XUẤT, KHÔNG GHI DỮ LIỆU
+    # -----------------------------------------------------------------
+    async def _propose_booking(self, session_id: int, validated_data: dict) -> dict:
+        slot_id = validated_data.get("slot_id")
+        reason = validated_data.get("reason")
+
+        if not slot_id:
+            return {
+                "reply": "Bạn muốn đặt khung giờ nào? Vui lòng cho mình biết khung giờ cụ thể.",
+                "suggestions": ["Xem lịch trống bác sĩ"],
+            }
+
+        # Lưu vào module-level dict
+        _pending_bookings[session_id] = {"slot_id": slot_id, "reason": reason}
+
+        reply = f"Bạn xác nhận đặt khung giờ khám mã #{slot_id}"
+        if reason:
+            reply += f" (lý do: {reason})"
+        reply += "?\n\nTrả lời 'xác nhận' để mình đặt lịch, hoặc 'hủy' nếu bạn đổi ý."
+
+        return {"reply": reply, "suggestions": ["Xác nhận", "Hủy"]}
+
+
 class ChatSessionService:
     def __init__(
         self,
         session_repo: ChatSessionRepoDep,
         message_repo: ChatMessageRepoDep,
         ai_chat_service: "AIChatService",
+        agent_chat_service: "AgentChatService",
     ) -> None:
         self.session_repo = session_repo
         self.message_repo = message_repo
         self.ai_chat_service = ai_chat_service
+        self.agent_chat_service = agent_chat_service
+
+
+    def _format_doctors_response(self, doctors: list[Doctor]) -> str:
+        if not doctors:
+            return "Không tìm thấy bác sĩ phù hợp với yêu cầu của bạn."
+        lines = ["Danh sách bác sĩ phù hợp tại Bệnh viện Bạch Mai:"]
+        for doc in doctors[:5]:
+            s_name = doc.specialty.name if doc.specialty else "Đa Khoa"
+            name = doc.user.full_name if doc.user else f"Bác sĩ ID {doc.id}"
+            degree = doc.degree or "Bác sĩ"
+            fee = float(doc.consultation_fee) if doc.consultation_fee else 0.0
+            lines.append(f"- {degree} {name} | Chuyên khoa: {s_name} | Giá khám: {fee:,.0f} VNĐ")
+        return "\n".join(lines)
+
+    def _build_not_found_message(
+            self, specialty: Optional[str], max_fee: Optional[float], doctor_name: Optional[str]
+    ) -> str:
+        if doctor_name:
+            reason = f"Không tìm thấy bác sĩ '{doctor_name}' trong hệ thống của Bệnh viện Bạch Mai."
+        elif specialty and max_fee:
+            reason = f"Hiện không có bác sĩ nào thuộc chuyên khoa '{specialty}' có giá khám dưới {max_fee:,.0f} VNĐ."
+        elif specialty:
+            reason = f"Không tìm thấy bác sĩ nào thuộc chuyên khoa '{specialty}' trong cơ sở dữ liệu."
+        elif max_fee:
+            reason = f"Hiện không có bác sĩ nào có giá khám dưới {max_fee:,.0f} VNĐ."
+        else:
+            reason = "Không tìm thấy bác sĩ phù hợp với yêu cầu của bạn."
+        return f"{reason} Bạn nên đến Khoa Khám bệnh (78 Giải Phóng, Hà Nội) để đăng ký khám theo diện BHYT hoặc khám thông thường."
+    
+
 
     async def create_session(
         self, current_user: User, title: str | None = None
     ) -> ChatSession:
         session = ChatSession(
-            user_id=current_user.id,
-            title=title or "Cuộc trò chuyện mới"
+            user_id=current_user.id, title=title or "Cuộc trò chuyện mới"
         )
         return await self.session_repo.create(session)
 
@@ -1570,7 +2956,7 @@ class ChatSessionService:
         return session
 
     async def send_message(
-        self, session_id: int, current_user: User, content: str
+            self, session_id: int, current_user: User, content: str
     ) -> dict:
         session = await self.get_owned_session(session_id, current_user)
 
@@ -1581,8 +2967,12 @@ class ChatSessionService:
             ChatMessage(session_id=session.id, role="user", content=content)
         )
 
-        result = await self.ai_chat_service.chat(
-            user_message=content, chat_history=chat_history
+        # SỬA: Thay đổi từ ai_chat_service thành agent_chat_service
+        result = await self.agent_chat_service.chat(
+            session_id=session_id,
+            user_message=content,
+            chat_history=chat_history,
+            current_user=current_user,
         )
 
         assistant_message = await self.message_repo.create(

@@ -149,9 +149,22 @@ async def get_my_chat_sessions(
 ):
     return await chat_session_service.get_user_sessions(current_user)
 
+
+@users_router.put("/me", response_model=UserOut)
+async def update_my_profile(
+    data: UserUpdate,
+    user_service: UserServiceDep,
+    patient_service: PatientServiceDep,
+    current_user: User = Depends(get_current_user),
+):
+    updated_user = await user_service.update_profile(current_user, data)
+
+    return updated_user
+
 appointments_router = APIRouter(prefix="/appointments", tags=["Appointments"])
 
 @appointments_router.post("", response_model=AppointmentOut, status_code=201)
+
 async def create_appointment(
     appointment_data: AppointmentCreate,
     appointment_service: AppointmentServiceDep,
@@ -161,6 +174,15 @@ async def create_appointment(
         patient,
         appointment_data,
     )
+
+@appointments_router.get("/availability", response_model=DoctorAvailabilityOut)
+async def get_doctor_availability(
+    doctor_id: int,
+    date: date,
+    appointment_service: AppointmentServiceDep,
+):
+    return await appointment_service.get_doctor_availability(doctor_id, date)
+
 
 
 @appointments_router.get("/{appointment_id}", response_model=AppointmentOut)
@@ -234,16 +256,8 @@ async def create_payment(
     )
     return PaymentOut.model_validate(payment)
 
-@appointments_router.get("/availability", response_model=DoctorAvailabilityOut)
-async def get_doctor_availability(
-    doctor_id: int,
-    date: date,
-    appointment_service: AppointmentServiceDep,
-):
-    return await appointment_service.get_doctor_availability(doctor_id, date)
 
 specialties_router = APIRouter(prefix="/specialties", tags=["Specialties"])
-
 
 @specialties_router.get("", response_model=list[SpecialtyOut])
 async def get_specialties(specialty_service: SpecialtyServiceDep):
