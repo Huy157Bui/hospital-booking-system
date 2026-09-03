@@ -25,7 +25,7 @@ for logger_name in ("sqlalchemy", "sqlalchemy.engine"):
 
 warnings.filterwarnings("ignore", message=".*error reading bcrypt version.*")
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from app.database import AsyncSessionLocal, engine
 from app.models import (
     Appointment,
@@ -410,7 +410,37 @@ async def seed():
 
         for doc in doctors:
             # Kiểm tra xem doctor đã có schedule ngày test chưa
-            # Nếu chưa, tạo mới
+            existing = await db.execute(
+                select(Schedule).where(
+                    Schedule.doctor_id == doc.id,
+                    Schedule.work_date == test_work_date,
+                )
+            )
+            existing_sched = existing.scalar_one_or_none()
+
+            if existing_sched:
+                # Nếu đã có, kiểm tra còn slot trống không
+                slots_result = await db.execute(
+                    select(ScheduleSlot).where(
+                        ScheduleSlot.schedule_id == existing_sched.id,
+                        ScheduleSlot.status == ScheduleSlotStatus.AVAILABLE,
+                    )
+                )
+                if slots_result.scalars().first():
+                    continue  # Đã có schedule + slot trống, bỏ qua
+
+                # Nếu chưa có slot trống, tạo thêm 6 slot
+                for start_h in [8, 9, 10, 13, 14, 15]:
+                    slot = ScheduleSlot(
+                        schedule_id=existing_sched.id,
+                        start_time=time(start_h, 0),
+                        end_time=time(start_h, 30),
+                        status=ScheduleSlotStatus.AVAILABLE,
+                    )
+                    db.add(slot)
+                continue
+
+            # Chưa có schedule → tạo mới
             sched = Schedule(
                 doctor_id=doc.id,
                 work_date=test_work_date,
