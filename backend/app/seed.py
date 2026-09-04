@@ -327,9 +327,49 @@ async def seed():
                     (time(13, 30), time(14, 0)), (time(14, 0), time(14, 30))
                 ]
                 for start_t, end_t in slot_times:
-                    slot = ScheduleSlot(schedule_id=sched.id, start_time=start_t, end_time=end_t, status=ScheduleSlotStatus.AVAILABLE)
+                    slot = ScheduleSlot(
+                        schedule_id=sched.id,
+                        start_time=start_t,
+                        end_time=end_t,
+                        status=ScheduleSlotStatus.AVAILABLE,
+                    )
                     db.add(slot)
-                    past_slots_info.append({
+                    past_slots_info.append(
+                        {"slot": slot, "work_date": d, "doctor_id": doc.id}
+                    )
+        await db.flush()
+
+        print("📅 Đang sinh Lịch làm việc cho 14 ngày tương lai...")
+        future_slots_info = []
+        for doc in sample_doctors:
+            for d in future_dates:
+                if d == test_date:
+                    continue  # Bỏ qua ngày test vì đã có phần riêng
+                if random.random() < 0.3:
+                    continue
+                sched = Schedule(
+                    doctor_id=doc.id, work_date=d, status=ScheduleStatus.OPEN
+                )
+                db.add(sched)
+                await db.flush()
+
+                slot_times = [
+                    (time(8, 0), time(8, 30)),
+                    (time(8, 30), time(9, 0)),
+                    (time(9, 0), time(9, 30)),
+                    (time(13, 0), time(13, 30)),
+                    (time(13, 30), time(14, 0)),
+                    (time(14, 0), time(14, 30)),
+                ]
+                for start_t, end_t in slot_times:
+                    slot = ScheduleSlot(
+                        schedule_id=sched.id,
+                        start_time=start_t,
+                        end_time=end_t,
+                        status=ScheduleSlotStatus.AVAILABLE,
+                    )
+                    db.add(slot)
+                    future_slots_info.append({
                         "slot": slot,
                         "work_date": d,
                         "doctor_id": doc.id

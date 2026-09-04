@@ -1,3 +1,5 @@
+// src/services/doctorService.ts
+
 import apiClient from './apiClient';
 import { Doctor } from '../types/doctor';
 import { Appointment } from '../types/appointment';
@@ -23,6 +25,13 @@ export const doctorService = {
   // Lấy hồ sơ bệnh án của bệnh nhân
   getPatientMedicalRecords: async (patientId: number): Promise<any[]> => {
     const response = await apiClient.get(`/patients/${patientId}/medical-records`);
+    return response.data;
+  },
+
+  getBySpecialty: async (specialtyId?: number): Promise<Doctor[]> => {
+    const response = await apiClient.get('/doctors', { 
+      params: specialtyId ? { specialty_id: specialtyId } : {} 
+    });
     return response.data;
   },
 };

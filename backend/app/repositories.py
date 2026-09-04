@@ -444,10 +444,17 @@ class AppointmentRepository(BaseRepository[Appointment]):
             .limit(limit)
             .options(
                 selectinload(Appointment.patient).selectinload(Patient.user),
-                selectinload(Appointment.slot),
+                selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.user),
+                selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.specialty),
             )
         )
-        return list(result.scalars().all())
+        return list(result.scalars().unique().all())
 
     async def get_by_doctor(
         self, doctor_id: int, *, skip: int = 0, limit: int = 100
@@ -461,42 +468,70 @@ class AppointmentRepository(BaseRepository[Appointment]):
             .limit(limit)
             .options(
                 selectinload(Appointment.patient).selectinload(Patient.user),
-                selectinload(Appointment.slot),
+                selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.user),
+                selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.specialty),
             )
         )
-        return list(result.scalars().all())
+        return list(result.scalars().unique().all())
 
     async def get_by_id_with_relations(self, appointment_id: int):
         result = await self.db.execute(
             select(Appointment)
+            .where(Appointment.id == appointment_id)
             .options(
                 selectinload(Appointment.patient).selectinload(Patient.user),
                 selectinload(Appointment.slot)
                 .selectinload(ScheduleSlot.schedule)
                 .selectinload(Schedule.doctor)
                 .selectinload(Doctor.user),
+                selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.specialty),
             )
-            .where(Appointment.id == appointment_id)
         )
         return result.scalar_one_or_none()
 
     async def get_by_slot_id(self, slot_id: int) -> Appointment | None:
         result = await self.db.execute(
-            select(Appointment).where(Appointment.slot_id == slot_id)
+            select(Appointment).where(
+                Appointment.slot_id == slot_id,
+                Appointment.status != AppointmentStatus.CANCELLED,
+                )
         )
         return result.scalar_one_or_none()
 
     async def create_with_slot(self, appointment: Appointment) -> Appointment:
         self.db.add(appointment)
         await self.db.flush()
+        slot_stmt = select(ScheduleSlot).where(ScheduleSlot.id == appointment.slot_id)
+        slot_result = await self.db.execute(slot_stmt)
+        slot = slot_result.scalar_one()
+        slot.status = ScheduleSlotStatus.BOOKED
+        await self.db.flush()
         stmt = (
             select(Appointment)
             .where(Appointment.id == appointment.id)
-            .options(selectinload(Appointment.slot))
+            .options(
+                selectinload(Appointment.patient).selectinload(Patient.user),
+                selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.user),
+                selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.specialty),
+            )
         )
         result = await self.db.execute(stmt)
-        appointment_loaded = result.scalar_one()
-        return appointment_loaded
+        return result.scalar_one()
 
     async def get_by_id_with_slot(self, appointment_id: int):
         stmt = (
@@ -522,7 +557,6 @@ class AppointmentRepository(BaseRepository[Appointment]):
         return doctor_id
 
     async def get_slot_with_doctor(self, slot_id: int) -> dict | None:
-        """Tra 1 lần: slot + doctor_id + work_date + status — không cần đoán ngày"""
         stmt = (
             select(ScheduleSlot, Schedule.doctor_id, Schedule.work_date)
             .join(Schedule, ScheduleSlot.schedule_id == Schedule.id)
@@ -547,9 +581,24 @@ class AppointmentRepository(BaseRepository[Appointment]):
         appointment.cancel_reason = cancel_reason
         appointment.slot.status = ScheduleSlotStatus.AVAILABLE
         await self.db.flush()
-        await self.db.refresh(appointment.slot, attribute_names=["updated_date"])
 
-        return appointment
+        stmt = (
+            select(Appointment)
+            .where(Appointment.id == appointment.id)
+            .options(
+                selectinload(Appointment.patient).selectinload(Patient.user),
+                selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.user),
+                selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.specialty),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
 
     async def update_status(
         self, appointment: Appointment, new_status: AppointmentStatus

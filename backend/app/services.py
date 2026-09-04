@@ -395,14 +395,10 @@ class AppointmentService:
             patient_id=patient.id,
             slot_id=slot.id,
             status=AppointmentStatus.PENDING,
+            reason=appointment_data.reason,
+            note=appointment_data.note,
         )
         appointment = await self.appointment_repo.create_with_slot(appointment)
-
-        slot.status = ScheduleSlotStatus.BOOKED
-        await self.slot_repo.update(slot)
-
-        await self.appointment_repo.commit()
-
         return appointment
 
     async def cancel_appointment(

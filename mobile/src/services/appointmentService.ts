@@ -14,17 +14,18 @@ export const appointmentService = {
   },
 
   create: async (payload: {
-    doctor_id: number;
-    specialty_id: number;
-    appointment_datetime: string;
+    slot_id: number;
+    reason?: string;
     note?: string;
   }): Promise<Appointment> => {
-    const response = await apiClient.post('/appointments', payload);
+    const response = await apiClient.post<Appointment>('/appointments', payload);
     return response.data;
   },
 
   cancel: async (id: number): Promise<void> => {
-    await apiClient.patch(`/appointments/${id}/cancel`);
+    await apiClient.patch(`/appointments/${id}/cancel`, {
+      cancel_reason: "Người dùng hủy từ ứng dụng di động"
+    });
   },
 
   pay: async (id: number): Promise<void> => {

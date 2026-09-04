@@ -174,9 +174,19 @@ class DoctorOut(DoctorBase):
 
 
 class DoctorScheduleOut(BaseModel):
-    doctor: DoctorOut
+    id: int
+    work_date: date
+    status: str | None = None
     slots: list["ScheduleSlotOut"]
 
+    model_config = ConfigDict(from_attributes=True)
+
+class ScheduleLiteOut(BaseModel):
+    id: int
+    work_date: date
+    doctor: DoctorOut | None = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 class SpecialtyBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
@@ -234,6 +244,7 @@ class ScheduleSlotOut(ScheduleSlotBase):
     start_time: time
     end_time: time
     schedule_id: int
+    schedule: ScheduleLiteOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
