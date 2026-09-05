@@ -13,6 +13,8 @@ interface AuthState {
   register: (credentials: RegisterCredentials) => Promise<void>;
   logout: () => Promise<void>;
   checkAutoLogin: () => Promise<void>;
+  setUser: (user: User | null) => void;
+  setToken: (token: string | null) => void;
 }
 
 const parseErrorMessage = (error: any, defaultMsg: string): string => {
@@ -34,7 +36,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (credentials) => {
     try {
       const response = await apiClient.post<TokenResponse>('/auth/login', credentials);
-      //console.log("🟢 [AUTH] Backend trả về:", response.data);
       const { access_token, user } = response.data;
       await storage.saveToken(access_token);
       set({ token: access_token, user, role: user.role, isAuthenticated: true });
@@ -53,9 +54,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     try {
-      await apiClient.post('/auth/logout');
-    } catch (e) {
-      console.warn('Logout API error', e);
+      const refreshToken = await storage.getRefreshToken();
+      if (refreshToken) {
+        await apiClient.post('/auth/logout', { refresh_token: refreshToken });
+      }
+    } catch (error) {
+      console.warn('Logout API error (vẫn tiếp tục clear local):', error);
     } finally {
       await storage.clearAll();
       set({ user: null, token: null, role: null, isAuthenticated: false });
@@ -79,4 +83,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isLoading: false });
     }
   },
+
+  setUser: (user: User | null) => set({ user }),
+  setToken: (token: string | null) => set({ token }),
 }));

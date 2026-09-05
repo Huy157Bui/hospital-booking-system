@@ -311,10 +311,23 @@ class UserService:
         return current_user
 
     async def update_profile(self, current_user: User, update_data: UserUpdate) -> User:
-        data = update_data.model_dump(exclude_unset=True)
+        data = update_data.model_dump(exclude_unset=True, exclude_none=True)
+        if "email" in data and data["email"] != current_user.email:
+            existing_user = await self.user_repo.get_by_email(data["email"])
+            if existing_user:
+                raise BadRequestException(
+                    "Email này đã được sử dụng bởi tài khoản khác."
+                )
+
+        if "username" in data and data["username"] != current_user.username:
+            existing_user = await self.user_repo.get_by_username(data["username"])
+            if existing_user:
+                raise BadRequestException("Username này đã được sử dụng.")
         for field, value in data.items():
             setattr(current_user, field, value)
-        return await self.user_repo.update(current_user)
+        updated_user = await self.user_repo.update(current_user)
+
+        return updated_user
 
 
 class AppointmentService:

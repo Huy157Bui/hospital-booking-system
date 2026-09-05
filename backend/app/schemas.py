@@ -43,7 +43,11 @@ class UserUpdate(BaseModel):
     username: str | None = None
     email: EmailStr | None = None
     full_name: str | None = None
-    phone: str | None = None
+    phone: str | None = Field(
+        default=None,
+        pattern=r"^(0|\+84)(3|5|7|8|9)[0-9]{8}$",
+        description="Số điện thoại Việt Nam hợp lệ (VD: 0912345678 hoặc +84912345678)",
+    )
     avatar: str | None = None
     role: UserRole | None = None
     is_active: bool | None = None

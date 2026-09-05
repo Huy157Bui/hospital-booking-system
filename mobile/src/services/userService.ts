@@ -16,7 +16,7 @@ export const userService = {
   },
 
   // Đổi mật khẩu
-  changePassword: async (data: { current_password: string; new_password: string }) => {
+  changePassword: async (data: { old_password: string; new_password: string }) => {
     const response = await apiClient.post('/auth/change-password', data);
     return response.data;
   }

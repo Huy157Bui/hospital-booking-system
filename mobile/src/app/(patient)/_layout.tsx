@@ -4,9 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { View, ActivityIndicator } from 'react-native';
 
 export default function PatientLayout() {
-  const { role, isLoading } = useAuthStore();
+  const { user, token, role, isLoading } = useAuthStore();
 
-  // ✅ Chờ load xong
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
@@ -15,14 +14,16 @@ export default function PatientLayout() {
     );
   }
 
-  // ✅ SO SÁNH VỚI CHỮ IN HOA 'PATIENT' (khớp với backend)
+  if (!token || !user) {
+    return <Redirect href="/(auth)/login" />;
+  }
+
   if (String(role).toUpperCase() !== 'PATIENT') {
     return <Redirect href="/(doctor)/today" />;
   }
 
   return (
-    <Tabs screenOptions={{ headerShown: false }}> 
-      {/* ✅ CHỈ DÙNG name="home" (KHÔNG có /index) */}
+    <Tabs screenOptions={{ headerShown: false }}>
       <Tabs.Screen 
         name="home"
         options={{ 
