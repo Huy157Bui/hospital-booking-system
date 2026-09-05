@@ -16,7 +16,6 @@ export default function AppointmentDetailScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  // 1. Lấy chi tiết lịch hẹn theo ID
   const { data: appointment, isLoading, isError } = useQuery<Appointment>({
     queryKey: ['appointmentDetail', appointmentId],
     queryFn: async () => {
@@ -25,7 +24,6 @@ export default function AppointmentDetailScreen() {
     enabled: !!appointmentId,
   });
 
-  // 2. Các hàm helper định dạng (giống với AppointmentCard để đồng bộ)
   const getStatusConfig = (status: string | undefined) => {
     switch (status?.toUpperCase()) {
       case 'PENDING': return { label: 'Chờ xác nhận', color: '#f59e0b', bg: '#fef3c7' };
@@ -53,7 +51,6 @@ export default function AppointmentDetailScreen() {
     };
   };
 
-  // 3. Xử lý hủy lịch
   const handleCancel = async () => {
     Alert.alert(
       'Xác nhận hủy lịch',
@@ -78,7 +75,39 @@ export default function AppointmentDetailScreen() {
     );
   };
 
-  // 4. Render các trạng thái Loading / Error
+  const handlePayment = async () => {
+    const amountToPay = (appointment as any).amount || (appointment as any).price || 500000; 
+
+    Alert.alert(
+      'Xác nhận thanh toán',
+      `Bạn có muốn thanh toán số tiền ${amountToPay.toLocaleString('vi-VN')} VNĐ cho lịch hẹn này?`,
+      [
+        { text: 'Không', style: 'cancel' },
+        { 
+          text: 'Thanh toán ngay', 
+          style: 'default',
+          onPress: async () => {
+            try {
+              await appointmentService.pay(Number(appointmentId), {
+                amount: amountToPay,
+                payment_method: 'MOBILE_APP'
+              });
+              
+              Alert.alert('Thành công', 'Thanh toán thành công! Lịch hẹn của bạn đã được xác nhận.');
+              
+              queryClient.invalidateQueries({ queryKey: ['appointmentDetail', appointmentId] });
+              queryClient.invalidateQueries({ queryKey: ['myAppointments'] });
+              
+            } catch (error: any) {
+              console.error('Payment Error:', error);
+              Alert.alert('Lỗi', error.response?.data?.detail || 'Không thể thực hiện thanh toán. Vui lòng thử lại.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.center}>
@@ -104,15 +133,18 @@ export default function AppointmentDetailScreen() {
   const { date, time } = formatDateTime();
   const doctorName = appointment.slot?.schedule?.doctor?.user?.full_name || 'Đang cập nhật';
   const specialtyName = appointment.slot?.schedule?.doctor?.specialty?.name || 'Chuyên khoa';
+  
   const canCancel = appointment.status === 'PENDING' || appointment.status === 'CONFIRMED';
+  const isPaidOrCompleted = appointment.status === 'PAID' || appointment.status === 'COMPLETED';
+  
+  const isPaymentCompleted = appointment.payment_status === 'PAID';
+  const canPay = !isPaymentCompleted && !isPaidOrCompleted && (appointment.status === 'PENDING' || appointment.status === 'CONFIRMED');
 
-  // 5. Render giao diện chính
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen options={{ title: 'Chi tiết lịch hẹn', headerBackTitle: 'Quay lại' }} />
       
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Header thông tin bác sĩ */}
         <View style={styles.card}>
           <View style={styles.doctorHeader}>
             <View style={styles.avatarPlaceholder}>
@@ -125,7 +157,6 @@ export default function AppointmentDetailScreen() {
           </View>
         </View>
 
-        {/* Thông tin chi tiết */}
         <View style={styles.card}>
           <View style={styles.detailRow}>
             <Ionicons name="calendar-outline" size={22} color="#2f6fed" />
@@ -173,7 +204,17 @@ export default function AppointmentDetailScreen() {
           )}
         </View>
 
-        {/* Nút hành động */}
+        {canPay && (
+          <TouchableOpacity 
+            style={styles.payButton} 
+            onPress={handlePayment} 
+            activeOpacity={0.7}
+          >
+            <Ionicons name="card-outline" size={22} color="#fff" />
+            <Text style={styles.payButtonText}>Thanh toán ngay</Text>
+          </TouchableOpacity>
+        )}
+
         {canCancel && (
           <TouchableOpacity style={styles.cancelButton} onPress={handleCancel} activeOpacity={0.7}>
             <Ionicons name="close-circle-outline" size={22} color="#fff" />
@@ -181,7 +222,6 @@ export default function AppointmentDetailScreen() {
           </TouchableOpacity>
         )}
         
-        {/* Khoảng trống cuối để không bị che bởi thanh điều hướng nếu có */}
         <View style={{ height: 20 }} />
       </ScrollView>
     </SafeAreaView>
@@ -236,4 +276,11 @@ const styles = StyleSheet.create({
     shadowColor: '#ef4444', shadowOpacity: 0.3, shadowRadius: 4, elevation: 4,
   },
   cancelButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  payButton: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#10b981',
+    paddingVertical: 16, borderRadius: 12, gap: 8, marginBottom: 12,
+    shadowColor: '#10b981', shadowOpacity: 0.3, shadowRadius: 4, elevation: 4,
+  },
+  payButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

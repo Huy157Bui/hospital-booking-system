@@ -81,3 +81,22 @@ export interface ExaminationRecordCreate {
   examined_at?: string;
   prescriptions?: PrescriptionCreate[];
 }
+
+export interface Payment {
+  id: number;
+  appointment_id: number;
+  amount: number;
+  payment_method: string | null;
+  status: string;
+  transaction_id: string | null;
+  created_date: string;
+  updated_date: string | null;
+  
+  appointment_summary?: {
+    id: number;
+    doctor_name: string;
+    specialty_name: string;
+    work_date: string;
+    start_time: string;
+  } | null;
+}

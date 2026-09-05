@@ -572,12 +572,26 @@ class PaymentCreate(PaymentBase):
     pass
 
 
-class PaymentOut(PaymentBase):
+class AppointmentSummaryOut(BaseModel):
     id: int
+    doctor_name: str
+    specialty_name: str
+    work_date: date
+    start_time: time
+
+    model_config = ConfigDict(from_attributes=True)
+
+class PaymentOut(BaseModel):
+    id: int
+    appointment_id: int
+    amount: float
+    payment_method: str | None
     status: str
     transaction_id: str | None
     created_date: datetime
     updated_date: datetime | None
+
+    appointment_summary: AppointmentSummaryOut | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

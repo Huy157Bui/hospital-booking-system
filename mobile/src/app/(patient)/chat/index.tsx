@@ -1,42 +1,46 @@
 // src/app/(patient)/chat/index.tsx
 import React, { useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, 
+  ActivityIndicator, Alert // ✅ Chỉ giữ lại các component cơ bản
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context'; // ✅ Import đúng thư viện có prop 'edges'
 import { useRouter, useFocusEffect } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { chatService } from '../../../services/chatService'; 
 import { ChatSession } from '../../../types/chat';
+import { useAuthStore } from '../../../store/useAuthStore';
 
 export default function PatientChatListScreen() {
   const router = useRouter();
+  const { token } = useAuthStore();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
+    if (!token) {
+      router.replace('/(auth)/login');
+      return;
+    }
+
     setLoading(true);
+    setError(null);
     try {
-      // ✅ SỬA 1: Đổi thành getMySessions() cho khớp với chatService
       const data = await chatService.getMySessions();
       setSessions(data);
-    } catch (error) {
-      console.error('Load chat sessions error:', error);
-      Alert.alert('Lỗi', 'Không thể tải danh sách chat.');
+    } catch (err: any) {
+      console.error('Load chat sessions error:', err);
+      setError('Không thể kết nối. Vui lòng kiểm tra mạng hoặc thử lại.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, router]);
 
-  // Tải lại khi màn hình được focus (nếu quay lại từ session)
   useFocusEffect(
     useCallback(() => {
       loadSessions();
-    }, [])
+    }, [loadSessions])
   );
 
   const handleCreateNewSession = async () => {
@@ -44,16 +48,13 @@ export default function PatientChatListScreen() {
       const newSession = await chatService.createSession();
       router.push({
         pathname: '/(patient)/chat/[sessionId]',
-        // ✅ SỬA 2: Ép kiểu number sang string cho params của Expo Router
         params: { sessionId: String(newSession.id) },
       });
     } catch (error) {
-      console.error('Create session error:', error);
       Alert.alert('Lỗi', 'Không thể tạo phiên chat mới.');
     }
   };
 
-  // ✅ SỬA 3: Tham số truyền vào phải là number (khớp với type ChatSession)
   const handlePressSession = (sessionId: number) => {
     router.push({
       pathname: '/(patient)/chat/[sessionId]',
@@ -61,18 +62,36 @@ export default function PatientChatListScreen() {
     });
   };
 
-  if (loading) {
+  if (loading && sessions.length === 0) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2f6fed" />
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#2f6fed" />
+          <Text style={styles.loadingText}>Đang tải lịch sử chat...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {sessions.length === 0 ? (
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Trợ lý AI</Text>
+      </View>
+
+      {error ? (
+        // ✅ GIAO DIỆN KHI CÓ LỖI MẠNG, CÓ NÚT THỬ LẠI
         <View style={styles.center}>
+          <Ionicons name="wifi-outline" size={48} color="#9ca3af" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadSessions}>
+            <Ionicons name="refresh" size={20} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.retryButtonText}>Thử lại</Text>
+          </TouchableOpacity>
+        </View>
+      ) : sessions.length === 0 ? (
+        <View style={styles.center}>
+          <Ionicons name="chatbubble-ellipses-outline" size={48} color="#cbd5e1" />
           <Text style={styles.emptyText}>Bạn chưa có phiên chat nào.</Text>
           <TouchableOpacity style={styles.createButton} onPress={handleCreateNewSession}>
             <Text style={styles.createButtonText}>+ Tạo phiên mới</Text>
@@ -85,65 +104,51 @@ export default function PatientChatListScreen() {
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.sessionItem}
-              onPress={() => handlePressSession(item.id)} // item.id giờ là number, hoàn toàn hợp lệ
+              onPress={() => handlePressSession(item.id)}
             >
-              <Text style={styles.sessionTitle}>{item.title || 'Tư vấn sức khỏe'}</Text>
-              <Text style={styles.sessionMeta}>
-                {/* Dùng created_date hoặc updated_date, không còn lỗi undefined nữa */}
-                {new Date(item.updated_date || item.created_date).toLocaleString('vi-VN')}
-              </Text>
+              <View style={styles.sessionIcon}>
+                <Ionicons name="chatbubble-ellipses" size={20} color="#2f6fed" />
+              </View>
+              <View style={styles.sessionInfo}>
+                <Text style={styles.sessionTitle}>{item.title || 'Tư vấn sức khỏe'}</Text>
+                <Text style={styles.sessionMeta}>
+                  {new Date(item.updated_date || item.created_date).toLocaleString('vi-VN')}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#ccc" />
             </TouchableOpacity>
           )}
-          contentContainerStyle={{ padding: 16 }}
+          contentContainerStyle={styles.listContent}
+          // Cho phép kéo xuống để tải lại (Pull to refresh)
+          onRefresh={loadSessions}
+          refreshing={loading}
         />
       )}
 
-      {/* Nút tạo mới nổi */}
       <TouchableOpacity style={styles.fab} onPress={handleCreateNewSession}>
-        <Text style={styles.fabText}>+</Text>
+        <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  safeArea: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: { paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee', marginBottom: 8 },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#333' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  loadingText: { marginTop: 12, fontSize: 16, color: '#6b7280' },
+  errorText: { marginTop: 12, fontSize: 16, color: '#ef4444', textAlign: 'center', marginBottom: 16 },
+  retryButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2f6fed', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
+  retryButtonText: { color: '#fff', fontWeight: '600', fontSize: 16 },
   emptyText: { fontSize: 16, color: '#888', marginBottom: 16 },
-  createButton: {
-    backgroundColor: '#2f6fed',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-  },
+  createButton: { backgroundColor: '#2f6fed', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8 },
   createButtonText: { color: '#fff', fontWeight: '600' },
-  sessionItem: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 16,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
+  listContent: { padding: 16 },
+  sessionItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, padding: 16, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  sessionIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#e0e7ff', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  sessionInfo: { flex: 1 },
   sessionTitle: { fontSize: 16, fontWeight: '600', color: '#333' },
   sessionMeta: { fontSize: 12, color: '#888', marginTop: 4 },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#2f6fed',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  fabText: { fontSize: 28, color: '#fff', fontWeight: '300' },
+  fab: { position: 'absolute', right: 20, bottom: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: '#2f6fed', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 5, shadowOffset: { width: 0, height: 2 } },
 });

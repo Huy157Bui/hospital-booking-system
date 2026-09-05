@@ -4,6 +4,7 @@ import logging
 import random
 import sys
 import warnings
+from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -420,7 +421,7 @@ async def seed():
         for doc in sample_doctors:
             for d in future_dates:
                 if d == test_date:
-                    continue  # Bỏ qua ngày test vì đã có phần riêng
+                    continue
                 if random.random() < 0.3:
                     continue
                 sched = Schedule(
@@ -540,15 +541,22 @@ async def seed():
                 )
                 db.add(payment)
 
+        doctors_by_specialty = defaultdict(list)
+        for doc in doctors:
+            doctors_by_specialty[doc.specialty_id].append(doc)
+
+        guaranteed_ids = {doc.id for doc in doctors[:15]}
+        for docs_in_spec in doctors_by_specialty.values():
+            cheapest = sorted(docs_in_spec, key=lambda d: d.consultation_fee)[:5]
+            guaranteed_ids.update(d.id for d in cheapest)
+
+        guaranteed_doctors = [doc for doc in doctors if doc.id in guaranteed_ids]
+
         print(
-            "📌 Đang TẠO CHẮC CHẮN lịch hẹn cho NHIỀU bác sĩ trong ngày hôm nay để test..."
+            f"📌 Đang TẠO CHẮC CHẮN lịch hẹn cho {len(guaranteed_doctors)} bác sĩ (top 15 + top 5 rẻ nhất mỗi khoa)..."
         )
 
-        # Lấy 15 bác sĩ đầu tiên để tạo lịch cho ngày hôm nay (thay vì chỉ 1 người)
-        test_doctors = doctors[:15] if len(doctors) >= 15 else doctors
-
-        for doc in test_doctors:
-            # 1. Đảm bảo bác sĩ có lịch làm việc hôm nay
+        for doc in guaranteed_doctors:
             sched_result = await db.execute(
                 select(Schedule).where(
                     Schedule.doctor_id == doc.id, Schedule.work_date == today
@@ -563,7 +571,6 @@ async def seed():
                 db.add(sched)
                 await db.flush()
 
-            # 2. Tạo 3 slot trống cụ thể cho mỗi bác sĩ hôm nay (8h, 9h, 14h)
             for start_h in [8, 9, 14]:
                 slot_check = await db.execute(
                     select(ScheduleSlot).where(
@@ -580,15 +587,13 @@ async def seed():
                     )
                     db.add(new_slot)
 
-                    # ✅ FIX: Buộc database sinh ID cho new_slot ngay lập tức
                     await db.flush()
 
-                    # 3. Gán ngẫu nhiên 1 bệnh nhân vào slot này để tạo lịch PENDING
-                    if random.random() < 0.7:  # 70% cơ hội slot này được đặt
+                    if random.random() < 0.7:
                         patient = random.choice(patients)
                         appt = Appointment(
                             patient_id=patient.id,
-                            slot_id=new_slot.id,  # ✅ Bây giờ new_slot.id đã có giá trị thực
+                            slot_id=new_slot.id,
                             booked_at=datetime.now(UTC),
                             reason=f"Khám demo test luồng đặt lịch",
                             status=AppointmentStatus.PENDING,
@@ -596,11 +601,42 @@ async def seed():
                         db.add(appt)
                         new_slot.status = ScheduleSlotStatus.BOOKED
 
+        print("📌 Đang TẠO CHẮC CHẮN lịch hẹn cho test_date (15/09/2026)...")
+        for doc in guaranteed_doctors:
+            sched_result = await db.execute(
+                select(Schedule).where(
+                    Schedule.doctor_id == doc.id, Schedule.work_date == test_date
+                )
+            )
+            sched = sched_result.scalar_one_or_none()
+            if not sched:
+                sched = Schedule(
+                    doctor_id=doc.id, work_date=test_date, status=ScheduleStatus.OPEN
+                )
+                db.add(sched)
+                await db.flush()
+
+            for start_h in [8, 9, 14]:
+                slot_check = await db.execute(
+                    select(ScheduleSlot).where(
+                        ScheduleSlot.schedule_id == sched.id,
+                        ScheduleSlot.start_time == time(start_h, 0),
+                    )
+                )
+                if not slot_check.scalar_one_or_none():
+                    new_slot = ScheduleSlot(
+                        schedule_id=sched.id,
+                        start_time=time(start_h, 0),
+                        end_time=time(start_h, 30),
+                        status=ScheduleSlotStatus.AVAILABLE,
+                    )
+                    db.add(new_slot)
         await db.flush()
+
         await db.commit()
         await db.close()
         await engine.dispose()
-        print(f"🎉 HOÀN THÀNH SEED! Đã tạo lịch hôm nay cho {len(test_doctors)} bác sĩ.")
+        print(f"🎉 HOÀN THÀNH SEED! Đã tạo lịch hôm nay cho {len(guaranteed_doctors)} bác sĩ.")
 
 
 if __name__ == "__main__":

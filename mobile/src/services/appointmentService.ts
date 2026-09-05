@@ -29,8 +29,13 @@ export const appointmentService = {
     });
   },
 
-  pay: async (id: number): Promise<void> => {
-    await apiClient.post(`/appointments/${id}/payment`);
+  pay: async (id: number, payload: { amount: number; payment_method?: string }): Promise<any> => {
+  const response = await apiClient.post(`/appointments/${id}/payment`, {
+    appointment_id: id,
+    amount: payload.amount,
+    payment_method: payload.payment_method || 'APP_INTERNAL', // Mặc định nếu không truyền
+  });
+  return response.data;
   },
 
   getAvailability: async (doctorId: number, date: string): Promise<any[]> => {
@@ -51,6 +56,11 @@ export const appointmentService = {
   createExaminationRecord: async (appointmentId: number, payload: any): Promise<any> => {
     console.log("📤 [API] Gửi dữ liệu hồ sơ khám:", JSON.stringify(payload, null, 2));
     const response = await apiClient.post(`/appointments/${appointmentId}/record`, payload);
+    return response.data;
+  },
+
+  getMyPayments: async (): Promise<import('../types/appointment').Payment[]> => {
+    const response = await apiClient.get('/users/me/payments');
     return response.data;
   },
 };

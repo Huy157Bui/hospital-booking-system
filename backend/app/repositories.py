@@ -1,5 +1,7 @@
 import logging
 
+from app.schemas import PaymentOut
+
 logger = logging.getLogger(__name__)
 
 from datetime import date, datetime
@@ -824,13 +826,56 @@ class PaymentRepository(BaseRepository[Payment]):
         return result.scalar_one_or_none()
 
     async def get_by_patient_id(self, patient_id: int) -> list[Payment]:
-        result = await self.db.execute(
+        stmt = (
             select(Payment)
             .join(Appointment, Payment.appointment_id == Appointment.id)
+            .options(
+                selectinload(Payment.appointment)
+                .selectinload(Appointment.patient)
+                .selectinload(Patient.user),
+                selectinload(Payment.appointment)
+                .selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.user),
+                selectinload(Payment.appointment)
+                .selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.specialty),
+            )
             .where(Appointment.patient_id == patient_id)
             .order_by(Payment.created_date.desc())
         )
-        return list(result.scalars().all())
+
+        result = await self.db.execute(stmt)
+        payments = list(result.scalars().all())
+        result_out = []
+        for p in payments:
+            p_dict = p.__dict__.copy()
+            appt = p.appointment
+
+            if (
+                appt
+                and getattr(appt, "slot", None)
+                and getattr(appt.slot, "schedule", None)
+                and getattr(appt.slot.schedule, "doctor", None)
+            ):
+
+                doctor = appt.slot.schedule.doctor
+                p_dict["appointment_summary"] = {
+                    "id": appt.id,
+                    "doctor_name": doctor.user.full_name if getattr(doctor, 'user', None) else "Chưa cập nhật",
+                    "specialty_name": doctor.specialty.name if getattr(doctor, 'specialty', None) else "Chưa cập nhật",
+                    "work_date": appt.slot.schedule.work_date,
+                    "start_time": appt.slot.start_time
+                }
+            else:
+                p_dict["appointment_summary"] = None
+
+            result_out.append(PaymentOut.model_validate(p_dict))
+
+        return result_out
 
     async def get_revenue_payments(
         self, start_date: datetime, end_date: datetime, doctor_id: int | None = None

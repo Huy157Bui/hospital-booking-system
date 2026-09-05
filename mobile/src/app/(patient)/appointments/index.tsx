@@ -1,3 +1,4 @@
+// src/app/(patient)/appointments/index.tsx
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -14,53 +15,42 @@ export default function PatientAppointmentsScreen() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabType>('upcoming');
 
-  // 1. Lấy dữ liệu bằng React Query
   const { data: allAppointments, isLoading, isError, refetch } = useQuery<Appointment[]>({
     queryKey: ['myAppointments'],
     queryFn: async () => {
       const response: any = await appointmentService.getMyAppointments();
       const rawData = Array.isArray(response) ? response : response?.data || [];
-      console.log("🔍 DỮ LIỆU RAW TỪ API (Appointment):", JSON.stringify(rawData[0], null, 2));
       return rawData;
     },
   });
 
-  // ✅ ĐÃ SỬA BƯỚC 3a: Hàm helper lấy ngày giờ an toàn, khớp với Type mới
   const getAppointmentDate = (appt: Appointment) => {
-    // Ưu tiên 1: Nếu backend đã gộp sẵn thành 1 chuỗi (như bạn đã thiết kế trong Type)
     if (appt.appointment_datetime) {
       return new Date(appt.appointment_datetime);
     }
-    // Ưu tiên 2: Nếu backend trả về dạng nested (đúng chuẩn model SQLAlchemy bạn gửi)
     if (appt.slot?.schedule?.work_date && appt.slot?.start_time) {
       return new Date(`${appt.slot.schedule.work_date}T${appt.slot.start_time}`);
     }
-    // Fallback an toàn: Trả về hiện tại nếu không tìm thấy, tránh crash app
     return new Date();
   };
 
-  // ✅ ĐÃ SỬA BƯỚC 3b: Lọc dữ liệu thông minh bằng useMemo (Ưu tiên Status)
   const filteredAppointments = useMemo(() => {
     if (!allAppointments) return [];
-    const now = new Date();
+    
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
 
     return allAppointments.filter((a) => {
       const apptDate = getAppointmentDate(a);
-      
-      // Xác định rõ trạng thái cuối cùng của lịch hẹn
       const isCancelled = a.status === 'CANCELLED';
       const isCompleted = a.status === 'COMPLETED';
-      const isActive = !isCancelled && !isCompleted; // PENDING, CONFIRMED, CHECKING_IN, EXAMINING, PAID
+      
+      const isPastDate = apptDate < startOfToday;
 
       if (activeTab === 'upcoming') {
-        // Tab Sắp tới: Hiển thị TẤT CẢ các lịch đang hoạt động (isActive).
-        // Chúng ta bỏ điều kiện `apptDate > now` để tránh trường hợp user test ngày quá khứ 
-        // hoặc lịch bị trễ vẫn được hiển thị để họ biết mà xử lý, thay vì biến mất vào Lịch sử.
-        return isActive;
+        return !isCancelled && !isCompleted && !isPastDate;
       } else {
-        // Tab Lịch sử: CHỈ hiển thị những lịch đã kết thúc vòng đời (Đã hủy hoặc Đã khám xong).
-        // Loại bỏ hoàn toàn điều kiện `apptDate <= now` vì nó đang kéo nhầm lịch PENDING vào đây.
-        return isCancelled || isCompleted;
+        return isCompleted || isCancelled || isPastDate;
       }
     });
   }, [allAppointments, activeTab]);
@@ -72,7 +62,6 @@ export default function PatientAppointmentsScreen() {
     });
   };
 
-  // ✅ Hàm xử lý hủy lịch
   const handleCancelAppointment = async (appointmentId: number) => {
     Alert.alert(
       'Xác nhận hủy lịch',
@@ -85,7 +74,6 @@ export default function PatientAppointmentsScreen() {
             try {
               await appointmentService.cancel(appointmentId);
               Alert.alert('Thành công', 'Đã hủy lịch hẹn.');
-              // Làm mới danh sách ngay lập tức
               refetch(); 
             } catch (error) {
               Alert.alert('Lỗi', 'Không thể hủy lịch hẹn. Vui lòng thử lại.');
@@ -143,7 +131,7 @@ export default function PatientAppointmentsScreen() {
           <AppointmentCard
             appointment={item}
             onPress={() => handlePressAppointment(item.id)}
-            onCancel={() => handleCancelAppointment(item.id)} // ✅ THÊM DÒNG NÀY
+            onAction={() => handleCancelAppointment(item.id)}
             variant="patient"
           />
         )}
