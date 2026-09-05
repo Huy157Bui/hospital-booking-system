@@ -141,8 +141,10 @@ async def seed():
             s = Specialty(
                 name=full_name,
                 description=str(desc) if desc else "Đơn vị thuộc Bệnh viện Bạch Mai",
-                location=str(u_data.get("Địa chỉ") or u_data.get("address") or "") or None,
-                phone=str(u_data.get("Số điện thoại") or u_data.get("phone") or "") or None,
+                location=str(u_data.get("Địa chỉ") or u_data.get("address") or "")
+                or None,
+                phone=str(u_data.get("Số điện thoại") or u_data.get("phone") or "")
+                or None,
                 email=str(u_data.get("email") or "") or None,
                 working_hours="07:30 - 16:30 (Thứ 2 - Thứ 6)",
                 status=SpecialtyStatus.ACTIVE,
@@ -238,9 +240,18 @@ async def seed():
 
         print("👤 Đang tạo dữ liệu Bệnh nhân mẫu...")
         patient_names = [
-            "Phạm Văn D", "Hoàng Thị E", "Đặng Văn F", "Ngô Thị G",
-            "Lý Văn H", "Trương Thị I", "Lê Văn K", "Võ Thị L",
-            "Nguyễn Thị M", "Trần Văn N", "Bùi Thị O", "Đỗ Văn P",
+            "Phạm Văn D",
+            "Hoàng Thị E",
+            "Đặng Văn F",
+            "Ngô Thị G",
+            "Lý Văn H",
+            "Trương Thị I",
+            "Lê Văn K",
+            "Võ Thị L",
+            "Nguyễn Thị M",
+            "Trần Văn N",
+            "Bùi Thị O",
+            "Đỗ Văn P",
         ]
         patient_users = []
         for i, name in enumerate(patient_names):
@@ -269,7 +280,15 @@ async def seed():
                 insurance_number=f"DN401{random.randint(100000000, 999999999)}",
                 blood_type=random.choice(["A", "B", "AB", "O"]),
                 emergency_contact=f"090{random.randint(1000000, 9999999)}",
-                occupation=random.choice(["Nhân viên văn phòng", "Giáo viên", "Kỹ sư", "Kinh doanh", "Nghỉ hưu"]),
+                occupation=random.choice(
+                    [
+                        "Nhân viên văn phòng",
+                        "Giáo viên",
+                        "Kỹ sư",
+                        "Kinh doanh",
+                        "Nghỉ hưu",
+                    ]
+                ),
             )
             db.add(pat)
             patients.append(pat)
@@ -281,21 +300,69 @@ async def seed():
                 patient_id=pat.id,
                 record_number=f"MR{pat.id:06d}",
                 allergy=random.choice(["Không", "Penicillin", "Sulfa", "Hải sản"]),
-                chronic_disease=random.choice(["Không", "Tăng huyết áp", "Đái tháo đường", "Hen suyễn"]),
-                medical_history=random.choice(["Khỏe mạnh", "Phẫu thuật ruột thừa 2018", "Cao huyết áp"]),
-                note=random.choice(["", "Cần tái khám định kỳ", "Dị ứng với thuốc tây"]),
+                chronic_disease=random.choice(
+                    ["Không", "Tăng huyết áp", "Đái tháo đường", "Hen suyễn"]
+                ),
+                medical_history=random.choice(
+                    ["Khỏe mạnh", "Phẫu thuật ruột thừa 2018", "Cao huyết áp"]
+                ),
+                note=random.choice(
+                    ["", "Cần tái khám định kỳ", "Dị ứng với thuốc tây"]
+                ),
             )
             db.add(rec)
             medical_records.append(rec)
         await db.flush()
 
         medicine_data = [
-            {"name": "Paracetamol 500mg", "code": "MED001", "unit": "Viên", "current_price": Decimal("1500"), "stock_quantity": 100, "status": "active"},
-            {"name": "Amoxicillin 500mg", "code": "MED002", "unit": "Viên", "current_price": Decimal("2500"), "stock_quantity": 80, "status": "active"},
-            {"name": "Omeprazole 20mg", "code": "MED003", "unit": "Viên", "current_price": Decimal("3000"), "stock_quantity": 60, "status": "active"},
-            {"name": "Vitamin C 1000mg", "code": "MED004", "unit": "Viên", "current_price": Decimal("1000"), "stock_quantity": 200, "status": "active"},
-            {"name": "Ciprofloxacin 500mg", "code": "MED005", "unit": "Viên", "current_price": Decimal("4000"), "stock_quantity": 40, "status": "active"},
-            {"name": "Loratadine 10mg", "code": "MED006", "unit": "Viên", "current_price": Decimal("2000"), "stock_quantity": 150, "status": "active"},
+            {
+                "name": "Paracetamol 500mg",
+                "code": "MED001",
+                "unit": "Viên",
+                "current_price": Decimal("1500"),
+                "stock_quantity": 100,
+                "status": "active",
+            },
+            {
+                "name": "Amoxicillin 500mg",
+                "code": "MED002",
+                "unit": "Viên",
+                "current_price": Decimal("2500"),
+                "stock_quantity": 80,
+                "status": "active",
+            },
+            {
+                "name": "Omeprazole 20mg",
+                "code": "MED003",
+                "unit": "Viên",
+                "current_price": Decimal("3000"),
+                "stock_quantity": 60,
+                "status": "active",
+            },
+            {
+                "name": "Vitamin C 1000mg",
+                "code": "MED004",
+                "unit": "Viên",
+                "current_price": Decimal("1000"),
+                "stock_quantity": 200,
+                "status": "active",
+            },
+            {
+                "name": "Ciprofloxacin 500mg",
+                "code": "MED005",
+                "unit": "Viên",
+                "current_price": Decimal("4000"),
+                "stock_quantity": 40,
+                "status": "active",
+            },
+            {
+                "name": "Loratadine 10mg",
+                "code": "MED006",
+                "unit": "Viên",
+                "current_price": Decimal("2000"),
+                "stock_quantity": 150,
+                "status": "active",
+            },
         ]
         for md in medicine_data:
             db.add(Medicine(**md))
@@ -305,26 +372,35 @@ async def seed():
         today = date.today()
         past_dates = [today - timedelta(days=i) for i in range(15, 0, -1)]
         future_dates = [today + timedelta(days=i) for i in range(14)]
+        if today not in future_dates:
+            future_dates.insert(0, today)
 
         test_date = date(2026, 9, 15)
         if test_date not in future_dates:
             future_dates.append(test_date)
 
-        sample_doctors = random.sample(doctors, min(200, len(doctors))) if doctors else []
+        sample_doctors = (
+            random.sample(doctors, min(200, len(doctors))) if doctors else []
+        )
 
         past_slots_info = []
         for doc in sample_doctors:
             for d in past_dates:
                 if random.random() < 0.3:
                     continue
-                sched = Schedule(doctor_id=doc.id, work_date=d, status=ScheduleStatus.OPEN)
+                sched = Schedule(
+                    doctor_id=doc.id, work_date=d, status=ScheduleStatus.OPEN
+                )
                 db.add(sched)
                 await db.flush()
 
                 slot_times = [
-                    (time(8, 0), time(8, 30)), (time(8, 30), time(9, 0)),
-                    (time(9, 0), time(9, 30)), (time(13, 0), time(13, 30)),
-                    (time(13, 30), time(14, 0)), (time(14, 0), time(14, 30))
+                    (time(8, 0), time(8, 30)),
+                    (time(8, 30), time(9, 0)),
+                    (time(9, 0), time(9, 30)),
+                    (time(13, 0), time(13, 30)),
+                    (time(13, 30), time(14, 0)),
+                    (time(14, 0), time(14, 30)),
                 ]
                 for start_t, end_t in slot_times:
                     slot = ScheduleSlot(
@@ -369,18 +445,20 @@ async def seed():
                         status=ScheduleSlotStatus.AVAILABLE,
                     )
                     db.add(slot)
-                    future_slots_info.append({
-                        "slot": slot,
-                        "work_date": d,
-                        "doctor_id": doc.id
-                    })
+                    future_slots_info.append(
+                        {"slot": slot, "work_date": d, "doctor_id": doc.id}
+                    )
         await db.flush()
 
         print("📋 Đang tạo Hồ sơ khám bệnh và Lịch hẹn mẫu...")
         past_appointments_info = []
         for pat in patients:
             for _ in range(random.randint(1, 2)):
-                available = [item for item in past_slots_info if item["slot"].status == ScheduleSlotStatus.AVAILABLE]
+                available = [
+                    item
+                    for item in past_slots_info
+                    if item["slot"].status == ScheduleSlotStatus.AVAILABLE
+                ]
                 if not available:
                     break
                 chosen_item = random.choice(available)
@@ -388,20 +466,34 @@ async def seed():
                 chosen_date = chosen_item["work_date"]
                 chosen_doc_id = chosen_item["doctor_id"]
 
-                status = random.choices([AppointmentStatus.COMPLETED, AppointmentStatus.PAID, AppointmentStatus.CANCELLED], weights=[0.5, 0.4, 0.1])[0]
+                status = random.choices(
+                    [
+                        AppointmentStatus.COMPLETED,
+                        AppointmentStatus.PAID,
+                        AppointmentStatus.CANCELLED,
+                    ],
+                    weights=[0.5, 0.4, 0.1],
+                )[0]
 
                 appt = Appointment(
                     patient_id=pat.id,
                     slot_id=chosen_slot.id,
-                    booked_at=datetime.combine(chosen_date, time(8, 0)) - timedelta(days=1),
-                    reason=random.choice(["Khám sức khỏe tổng quát", "Đau đầu kéo dài", "Đau dạ dày", "Tái khám"]),
+                    booked_at=datetime.combine(chosen_date, time(8, 0))
+                    - timedelta(days=1),
+                    reason=random.choice(
+                        [
+                            "Khám sức khỏe tổng quát",
+                            "Đau đầu kéo dài",
+                            "Đau dạ dày",
+                            "Tái khám",
+                        ]
+                    ),
                     status=status,
                 )
                 db.add(appt)
-                past_appointments_info.append({
-                    "appt": appt,
-                    "doctor_id": chosen_doc_id
-                })
+                past_appointments_info.append(
+                    {"appt": appt, "doctor_id": chosen_doc_id}
+                )
                 chosen_slot.status = ScheduleSlotStatus.BOOKED
         await db.flush()
 
@@ -409,7 +501,10 @@ async def seed():
             appt = item["appt"]
             doc_id = item["doctor_id"]
             if appt.status in [AppointmentStatus.COMPLETED, AppointmentStatus.PAID]:
-                med_record = next((r for r in medical_records if r.patient_id == appt.patient_id), None)
+                med_record = next(
+                    (r for r in medical_records if r.patient_id == appt.patient_id),
+                    None,
+                )
                 if not med_record:
                     continue
                 exam = Examination(
@@ -445,65 +540,67 @@ async def seed():
                 )
                 db.add(payment)
 
-        print("📌 Đang tạo slot cố định cho ngày test 15/09/2026...")
-        test_work_date = date(2026, 9, 15)
+        print(
+            "📌 Đang TẠO CHẮC CHẮN lịch hẹn cho NHIỀU bác sĩ trong ngày hôm nay để test..."
+        )
 
-        for doc in doctors:
-            # Kiểm tra xem doctor đã có schedule ngày test chưa
-            existing = await db.execute(
+        # Lấy 15 bác sĩ đầu tiên để tạo lịch cho ngày hôm nay (thay vì chỉ 1 người)
+        test_doctors = doctors[:15] if len(doctors) >= 15 else doctors
+
+        for doc in test_doctors:
+            # 1. Đảm bảo bác sĩ có lịch làm việc hôm nay
+            sched_result = await db.execute(
                 select(Schedule).where(
-                    Schedule.doctor_id == doc.id,
-                    Schedule.work_date == test_work_date,
+                    Schedule.doctor_id == doc.id, Schedule.work_date == today
                 )
             )
-            existing_sched = existing.scalar_one_or_none()
+            sched = sched_result.scalar_one_or_none()
 
-            if existing_sched:
-                # Nếu đã có, kiểm tra còn slot trống không
-                slots_result = await db.execute(
+            if not sched:
+                sched = Schedule(
+                    doctor_id=doc.id, work_date=today, status=ScheduleStatus.OPEN
+                )
+                db.add(sched)
+                await db.flush()
+
+            # 2. Tạo 3 slot trống cụ thể cho mỗi bác sĩ hôm nay (8h, 9h, 14h)
+            for start_h in [8, 9, 14]:
+                slot_check = await db.execute(
                     select(ScheduleSlot).where(
-                        ScheduleSlot.schedule_id == existing_sched.id,
-                        ScheduleSlot.status == ScheduleSlotStatus.AVAILABLE,
+                        ScheduleSlot.schedule_id == sched.id,
+                        ScheduleSlot.start_time == time(start_h, 0),
                     )
                 )
-                if slots_result.scalars().first():
-                    continue  # Đã có schedule + slot trống, bỏ qua
-
-                # Nếu chưa có slot trống, tạo thêm 6 slot
-                for start_h in [8, 9, 10, 13, 14, 15]:
-                    slot = ScheduleSlot(
-                        schedule_id=existing_sched.id,
+                if not slot_check.scalar_one_or_none():
+                    new_slot = ScheduleSlot(
+                        schedule_id=sched.id,
                         start_time=time(start_h, 0),
                         end_time=time(start_h, 30),
                         status=ScheduleSlotStatus.AVAILABLE,
                     )
-                    db.add(slot)
-                continue
+                    db.add(new_slot)
 
-            # Chưa có schedule → tạo mới
-            sched = Schedule(
-                doctor_id=doc.id,
-                work_date=test_work_date,
-                status=ScheduleStatus.OPEN,
-            )
-            db.add(sched)
-            await db.flush()
+                    # ✅ FIX: Buộc database sinh ID cho new_slot ngay lập tức
+                    await db.flush()
 
-            for start_h in [8, 9, 10, 13, 14, 15]:
-                slot = ScheduleSlot(
-                    schedule_id=sched.id,
-                    start_time=time(start_h, 0),
-                    end_time=time(start_h, 30),
-                    status=ScheduleSlotStatus.AVAILABLE,
-                )
-                db.add(slot)
+                    # 3. Gán ngẫu nhiên 1 bệnh nhân vào slot này để tạo lịch PENDING
+                    if random.random() < 0.7:  # 70% cơ hội slot này được đặt
+                        patient = random.choice(patients)
+                        appt = Appointment(
+                            patient_id=patient.id,
+                            slot_id=new_slot.id,  # ✅ Bây giờ new_slot.id đã có giá trị thực
+                            booked_at=datetime.now(UTC),
+                            reason=f"Khám demo test luồng đặt lịch",
+                            status=AppointmentStatus.PENDING,
+                        )
+                        db.add(appt)
+                        new_slot.status = ScheduleSlotStatus.BOOKED
 
         await db.flush()
-
         await db.commit()
         await db.close()
         await engine.dispose()
-        print("🎉 HOÀN THÀNH! Đã nạp thành công 55 Khoa, 626 Bác sĩ Bạch Mai và dữ liệu mẫu vào Database!")
+        print(f"🎉 HOÀN THÀNH SEED! Đã tạo lịch hôm nay cho {len(test_doctors)} bác sĩ.")
 
 
 if __name__ == "__main__":

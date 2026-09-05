@@ -601,10 +601,12 @@ class AppointmentRepository(BaseRepository[Appointment]):
         return result.scalar_one()
 
     async def update_status(
-        self, appointment: Appointment, new_status: AppointmentStatus
+            self, appointment: Appointment, new_status: AppointmentStatus
     ) -> Appointment:
         appointment.status = new_status
         await self.db.flush()
+        await self.db.commit()
+        await self.db.refresh(appointment)
         return appointment
 
     async def exists_by_doctor_and_patient(

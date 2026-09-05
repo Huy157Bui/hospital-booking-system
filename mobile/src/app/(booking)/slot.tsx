@@ -22,18 +22,6 @@ export default function BookingSlotScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
 
-  if (!doctorId) {
-    return (
-      <View style={styles.center}>
-        <Ionicons name="alert-circle-outline" size={48} color="#f59e0b" />
-        <Text style={styles.emptyText}>Vui lòng chọn bác sĩ trước khi chọn lịch.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={styles.retryButton}>
-          <Text style={styles.retryText}>Quay lại</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   useEffect(() => {
     if (!doctorId) return;
 
@@ -50,7 +38,6 @@ export default function BookingSlotScreen() {
           setSelectedDate(firstDate);
         }
       } catch (error) {
-        console.error('❌ Lỗi khi lấy lịch:', error);
         Alert.alert('Lỗi', 'Không thể tải lịch khám của bác sĩ.');
       } finally {
         setIsLoading(false);
@@ -60,10 +47,20 @@ export default function BookingSlotScreen() {
     fetchSchedule();
   }, [doctorId]);
 
-  // ✅ Đã thêm kiểu : any cho tham số s
+  if (!doctorId) {
+    return (
+      <View style={styles.center}>
+        <Ionicons name="alert-circle-outline" size={48} color="#f59e0b" />
+        <Text style={styles.emptyText}>Vui lòng chọn bác sĩ trước khi chọn lịch.</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.retryButton}>
+          <Text style={styles.retryText}>Quay lại</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const currentSchedule = schedules.find((s: any) => (s.work_date || s.date) === selectedDate);
   
-  // ✅ Ép kiểu mảng để TypeScript hiểu rõ cấu trúc
   const availableSlots: any[] = (currentSchedule?.slots || []).filter(
     (slot: any) => slot.status === ScheduleSlotStatus.AVAILABLE
   );
@@ -89,7 +86,6 @@ export default function BookingSlotScreen() {
       return;
     }
     
-    // ✅ ĐÃ SỬA: Thêm (s: any) để hết lỗi implicit any
     const selectedSlotObj = availableSlots.find((s: any) => s.id === selectedSlotId);
     const timeString = selectedSlotObj ? formatTime(selectedSlotObj.start_time) : '';
 

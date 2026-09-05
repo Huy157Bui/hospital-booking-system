@@ -1,4 +1,3 @@
-// src/app/(booking)/doctor.tsx
 import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet, Image } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -13,28 +12,14 @@ export default function BookingDoctorScreen() {
   const router = useRouter();
   const { specialtyId, specialtyName, setDoctor } = useBookingStore();
 
-  //console.log("🟡 [DEBUG] specialtyId hiện tại trong Store:", specialtyId);
-
-  // Gọi API lấy bác sĩ theo specialtyId đã chọn
   const { data: doctors, isLoading, isError, refetch } = useDoctorsBySpecialty(specialtyId);
-
-  //React.useEffect(() => {
-  //  if (doctors) {
-  //    console.log("🟢 [DEBUG] Danh sách bác sĩ trả về:", doctors);
-  //  }
-  //}, [doctors]);
   
   const handleSelectDoctor = (doctor: Doctor) => {
-    // 1. Lưu thông tin bác sĩ vào store
-    // Lưu ý: Tùy backend trả về 'name' hay 'user.full_name', ta lấy giá trị phù hợp
     const doctorName = (doctor as any).name || (doctor as any).user?.full_name || 'Bác sĩ';
     setDoctor(doctor.id, doctorName);
-    
-    // 2. Chuyển sang bước 3: Chọn ngày giờ
     router.push('/(booking)/slot');
   };
 
-  // Xử lý trường hợp chưa chọn chuyên khoa (tránh lỗi)
   if (!specialtyId) {
     return (
       <View style={styles.center}>
@@ -68,7 +53,6 @@ export default function BookingDoctorScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {/* Header thông tin chuyên khoa đã chọn */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Bác sĩ chuyên khoa</Text>
         <Text style={styles.headerSubtitle}>{specialtyName || '...'}</Text>
@@ -84,9 +68,7 @@ export default function BookingDoctorScreen() {
             <Text style={styles.emptyText}>Chưa có bác sĩ nào trong chuyên khoa này.</Text>
           </View>
         }
-
         renderItem={({ item }) => {
-          // Lấy tên và avatar: ưu tiên field flatten, nếu không có thì lấy từ object user
           const name = item.full_name || item.user?.full_name || 'Bác sĩ';
           const avatar = item.avatar || item.user?.avatar;
           const degree = item.degree || 'Bác sĩ';

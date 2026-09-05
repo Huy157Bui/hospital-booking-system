@@ -1,4 +1,3 @@
-// src/app/(booking)/specialty.tsx
 import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -12,13 +11,10 @@ export default function BookingSpecialtyScreen() {
   const router = useRouter();
   const { setSpecialty } = useBookingStore();
   
-  // Tái sử dụng hook đã viết, không cần fetch lại
   const { data: specialties, isLoading, isError, refetch } = useSpecialties();
 
   const handleSelectSpecialty = (id: number, name: string) => {
-    // 1. Lưu vào store
     setSpecialty(id, name);
-    // 2. Chuyển sang bước 2
     router.push('/(booking)/doctor');
   };
 

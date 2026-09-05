@@ -33,6 +33,7 @@ export interface Appointment {
   id: number;
   patient_id: number;
   patient_name?: string;
+  reason?: string;
 
   patient?: {
     id: number;
@@ -57,4 +58,26 @@ export interface Appointment {
   created_at?: string; 
   
   payment_status?: 'PENDING' | 'PAID' | 'FAILED';
+}
+
+export interface PrescriptionCreate {
+  medicine_name?: string;
+  dosage: string;
+  quantity: number;
+  instruction: string;
+}
+
+export interface ExaminationRecordCreate {
+  symptom?: string;
+  diagnosis?: string;
+  conclusion?: string;
+  disease_name?: string;
+  height?: number;
+  weight?: number;
+  blood_pressure?: string;
+  heart_rate?: number;
+  temperature?: number;
+  note?: string;
+  examined_at?: string;
+  prescriptions?: PrescriptionCreate[];
 }

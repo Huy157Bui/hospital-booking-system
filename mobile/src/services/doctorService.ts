@@ -5,9 +5,8 @@ import { Doctor } from '../types/doctor';
 import { Appointment } from '../types/appointment';
 
 export const doctorService = {
-  // Lấy lịch hẹn của bác sĩ đang đăng nhập
   getMyAppointments: async (params?: { date?: string; status?: string }): Promise<Appointment[]> => {
-    const response = await apiClient.get('/doctors/me/appointments', { params });
+    const response = await apiClient.get('/users/me/appointments', { params });
     return response.data;
   },
 

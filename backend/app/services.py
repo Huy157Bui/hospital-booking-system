@@ -566,8 +566,8 @@ class AppointmentService:
             examination = await self.examination_repo.update(examination)
 
         if data.prescriptions:
-            existing_prescriptions = (
-                await self.prescription_repo.get_by_examination(examination.id)
+            existing_prescriptions = await self.prescription_repo.get_by_examination(
+                examination.id
             )
             await self.prescription_repo.delete_many(existing_prescriptions)
 
@@ -611,7 +611,11 @@ class AppointmentService:
                 await self.prescription_repo.update(prescription)
 
             await self._safe_refresh(self.examination_repo, examination)
-            return examination
+        if appointment.status != AppointmentStatus.COMPLETED:
+            await self.appointment_repo.update_status(appointment, AppointmentStatus.COMPLETED)
+
+        full_examination = await self.examination_repo.get_by_appointment(appointment_id)
+        return full_examination if full_examination else examination
 
     @staticmethod
     async def _safe_refresh(repo, obj):

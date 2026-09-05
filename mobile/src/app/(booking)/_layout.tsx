@@ -32,7 +32,7 @@ export default function BookingLayout() {
         name="success" 
         options={{ 
           title: 'Đặt lịch thành công',
-          headerShown: false // Màn success ẩn header để tránh user bấm back quay lại bước trước
+          headerShown: false
         }} 
       />
     </Stack>

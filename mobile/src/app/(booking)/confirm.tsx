@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
@@ -40,25 +41,26 @@ export default function BookingConfirmScreen() {
 
     setIsSubmitting(true);
     try {
-      await appointmentService.create({
+      const newAppointment = await appointmentService.create({
         slot_id: slotId,
         note: note.trim() || undefined,
         reason: note.trim() || undefined,
       });
+
       queryClient.invalidateQueries({ queryKey: ['myAppointments'] });
-      Alert.alert('Thành công', 'Đặt lịch khám thành công!', [
-        {
-          text: 'OK',
-          onPress: () => {
-            router.replace('/(patient)/home');
-            setTimeout(() => {
-              resetBooking();
-            }, 100);
-          },
-        },
-      ]);
+
+      const payload = {
+        appointmentId: newAppointment?.id?.toString() || 'N/A',
+        doctorName, specialty: specialtyName, date, time: slotTime,
+      };
+
+      router.replace({ pathname: '/(booking)/success', params: payload });
+
+      setTimeout(() => {
+        resetBooking();
+      }, 300);
+
     } catch (error: any) {
-      console.error('Lỗi đặt lịch:', error);
       const errorMsg = error.response?.data?.detail || 'Có lỗi xảy ra khi đặt lịch. Vui lòng thử lại.';
       Alert.alert('Đặt lịch thất bại', errorMsg);
     } finally {
@@ -74,13 +76,11 @@ export default function BookingConfirmScreen() {
       >
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           
-          {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Xác nhận đặt lịch</Text>
             <Text style={styles.headerSubtitle}>Vui lòng kiểm tra lại thông tin trước khi xác nhận</Text>
           </View>
 
-          {/* Card thông tin tóm tắt */}
           <View style={styles.card}>
             <View style={styles.infoRow}>
               <Ionicons name="person" size={20} color="#2f6fed" />
@@ -131,7 +131,6 @@ export default function BookingConfirmScreen() {
             </View>
           </View>
 
-          {/* Form ghi chú */}
           <View style={styles.noteSection}>
             <Text style={styles.noteLabel}>Triệu chứng / Ghi chú (Không bắt buộc)</Text>
             <TextInput
@@ -148,7 +147,6 @@ export default function BookingConfirmScreen() {
 
         </ScrollView>
 
-        {/* Footer Button */}
         <View style={styles.footer}>
           <TouchableOpacity
             style={[styles.confirmButton, isSubmitting && styles.confirmButtonDisabled]}

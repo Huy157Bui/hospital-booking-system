@@ -2,14 +2,15 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Appointment } from '../../types/appointment';
 
+// 1. Sửa interface (thay onCancel thành onAction cho linh hoạt)
 interface Props {
   appointment: Appointment;
   variant: 'patient' | 'doctor';
   onPress?: () => void;
-  onCancel?: () => void;
+  onAction?: () => void; // ✅ Đổi tên để dùng chung cho cả Hủy (Patient) và Cập nhật (Doctor)
 }
 
-export function AppointmentCard({ appointment, variant, onPress, onCancel }: Props) {
+export function AppointmentCard({ appointment, variant, onPress, onAction }: Props) {
   
   const getStatusColor = (status: string | undefined) => {
     switch (status?.toUpperCase()) {
@@ -79,15 +80,19 @@ export function AppointmentCard({ appointment, variant, onPress, onCancel }: Pro
         📅 {displayDate} • 🕒 {displayTime}
       </Text>
 
-      {canCancel && onCancel && (
-        <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.7}>
+      {variant === 'patient' && onAction && (appointment.status === 'PENDING' || appointment.status === 'CONFIRMED') && (
+        <TouchableOpacity style={styles.cancelBtn} onPress={onAction} activeOpacity={0.7}>
           <Text style={styles.cancelText}>Hủy lịch hẹn</Text>
         </TouchableOpacity>
       )}
 
-      {variant === 'doctor' && onCancel && (
-        <TouchableOpacity style={styles.actionBtn} onPress={onCancel}>
-          <Text style={styles.actionText}>Cập nhật trạng thái</Text>
+      {variant === 'doctor' && onAction && appointment.status !== 'COMPLETED' && appointment.status !== 'CANCELLED' && (
+        <TouchableOpacity style={styles.actionBtn} onPress={onAction}>
+          <Text style={styles.actionText}>
+            {appointment.status === 'PENDING' ? 'Bắt đầu khám (Check-in)' : 
+             appointment.status === 'CHECKING_IN' ? 'Chuyển sang Đang khám' : 
+             'Hoàn tất khám'}
+          </Text>
         </TouchableOpacity>
       )}
     </TouchableOpacity>
