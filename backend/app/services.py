@@ -91,8 +91,10 @@ from app.schemas import (
     ListSpecialtiesInput,
     BookAppointmentInput,
     PatientUpdate,
-    SearchKnowledgeInput
+    SearchKnowledgeInput,
+    ScheduleOut
 )
+from app.schemas import PatientSummaryOut
 from app.utils import generate_record_number
 
 CURRENT_FILE = Path(__file__).resolve()
@@ -515,6 +517,7 @@ class AppointmentService:
         if appointment.slot.schedule.doctor_id != doctor.id:
             raise ForbiddenException("Bạn không phải bác sĩ được phân công")
         if appointment.status not in (
+            AppointmentStatus.CHECKING_IN,
             AppointmentStatus.EXAMINING,
             AppointmentStatus.COMPLETED,
         ):
@@ -786,6 +789,7 @@ class DoctorService:
         schedule_repo: ScheduleRepoDep,
         appointment_repo: AppointmentRepoDep,
         slot_repo: ScheduleSlotRepoDep,
+        examination_repo: ExaminationRepoDep,
     ) -> None:
         self.doctor_repo = doctor_repo
         self.user_repo = user_repo
@@ -793,6 +797,11 @@ class DoctorService:
         self.schedule_repo = schedule_repo
         self.appointment_repo = appointment_repo
         self.slot_repo = slot_repo
+        self.examination_repo = examination_repo
+
+    async def get_my_patients(self, doctor: Doctor) -> list["PatientSummaryOut"]:
+        patients_data = await self.examination_repo.get_patients_by_doctor_id(doctor.id)
+        return [PatientSummaryOut.model_validate(p) for p in patients_data]
 
     async def get_profile_by_user_id(self, user_id: int) -> Doctor:
         doctor = await self.doctor_repo.get_by_user_id(user_id)
@@ -837,9 +846,7 @@ class DoctorService:
             raise BadRequestException("Người dùng không phải bác sĩ")
         if await self.doctor_repo.get_by_user_id(doctor_data.user_id):
             raise ConflictException("Hồ sơ bác sĩ đã tồn tại")
-        specialty = await self.specialty_repo.get_active_by_id(
-            doctor_data.specialty_id
-        )
+        specialty = await self.specialty_repo.get_active_by_id(doctor_data.specialty_id)
         if specialty is None:
             raise ResourceNotFound("Không tìm thấy chuyên khoa")
         if await self.doctor_repo.get_by_license(doctor_data.license_number):
@@ -848,6 +855,13 @@ class DoctorService:
             id=doctor_data.user_id, **doctor_data.model_dump(exclude={"user_id"})
         )
         return await self.doctor_repo.create(doctor)
+
+    async def get_my_schedule(self, user: User) -> list["ScheduleOut"]:
+        try:
+            schedules = await self.schedule_repo.get_schedules_by_doctor_id(user.id)
+            return schedules
+        except Exception as e:
+            return []
 
 
 class PatientService:
@@ -901,9 +915,12 @@ class PatientService:
         patient = await self.patient_repo.get_by_id(patient_id)
         if not patient:
             raise ResourceNotFound("Không tìm thấy bệnh nhân")
-        if current_user.role == UserRole.ADMIN:
-            pass
-        elif current_user.role == UserRole.DOCTOR:
+        is_owner = patient.id == current_user.id
+        is_admin = current_user.role == UserRole.ADMIN
+        is_doctor = current_user.role == UserRole.DOCTOR
+        if not (is_owner or is_admin or is_doctor):
+            raise ForbiddenException("Bạn không có quyền xem hồ sơ bệnh án này")
+        if is_doctor:
             doctor = await self.doctor_repo.get_by_user_id(current_user.id)
             if not doctor:
                 raise ResourceNotFound("Không tìm thấy hồ sơ bác sĩ")
@@ -914,13 +931,12 @@ class PatientService:
                 raise ForbiddenException(
                     "Bạn không có quyền xem hồ sơ bệnh án của bệnh nhân này"
                 )
-        else:
-            raise ForbiddenException(
-                "Chỉ bác sĩ và quản trị viên mới có quyền truy cập"
-            )
         medical_record = await self.medical_record_repo.get_by_patient_id(patient_id)
         examinations = await self.examination_repo.get_by_patient(patient_id)
-        return {"medical_record": medical_record, "examinations": examinations}
+        return {
+            "medical_record": medical_record,
+            "examinations": examinations
+        }
 
 
 class ScheduleService:
@@ -971,6 +987,17 @@ class PaymentService:
             return PaymentOut.model_validate(payment)
 
         raise ForbiddenException("Bạn không có quyền truy cập giao dịch này")
+
+class MedicineService:
+    def __init__(
+        self,
+        medicine_repo: MedicineRepoDep,
+    ) -> None:
+        self.medicine_repo = medicine_repo
+
+    async def get_active_medicines(self, skip: int = 0, limit: int = 100) -> list[Medicine]:
+        medicines = await self.medicine_repo.get_active_medicines(skip=skip, limit=limit)
+        return medicines
 
 
 class ReportService:

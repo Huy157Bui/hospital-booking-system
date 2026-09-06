@@ -26,11 +26,13 @@ for logger_name in ("sqlalchemy", "sqlalchemy.engine"):
 
 warnings.filterwarnings("ignore", message=".*error reading bcrypt version.*")
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from app.database import AsyncSessionLocal, engine
 from app.models import (
     Appointment,
     AppointmentStatus,
+    ChatMessage,
+    ChatSession,
     Doctor,
     Examination,
     Gender,
@@ -41,6 +43,7 @@ from app.models import (
     PaymentStatus,
     Prescription,
     PrescriptionDetail,
+    RefreshToken,
     Schedule,
     ScheduleSlot,
     ScheduleSlotStatus,
@@ -49,12 +52,8 @@ from app.models import (
     SpecialtyStatus,
     User,
     UserRole,
-    ChatMessage,
-    ChatSession,
-    RefreshToken,
 )
 from app.services import hash_password
-from sqlalchemy import text
 
 
 def random_date(start: date, end: date) -> date:
@@ -320,7 +319,7 @@ async def seed():
                 "name": "Paracetamol 500mg",
                 "code": "MED001",
                 "unit": "Viên",
-                "current_price": Decimal("1500"),
+                "current_price": Decimal(1500),
                 "stock_quantity": 100,
                 "status": "active",
             },
@@ -328,7 +327,7 @@ async def seed():
                 "name": "Amoxicillin 500mg",
                 "code": "MED002",
                 "unit": "Viên",
-                "current_price": Decimal("2500"),
+                "current_price": Decimal(2500),
                 "stock_quantity": 80,
                 "status": "active",
             },
@@ -336,7 +335,7 @@ async def seed():
                 "name": "Omeprazole 20mg",
                 "code": "MED003",
                 "unit": "Viên",
-                "current_price": Decimal("3000"),
+                "current_price": Decimal(3000),
                 "stock_quantity": 60,
                 "status": "active",
             },
@@ -344,7 +343,7 @@ async def seed():
                 "name": "Vitamin C 1000mg",
                 "code": "MED004",
                 "unit": "Viên",
-                "current_price": Decimal("1000"),
+                "current_price": Decimal(1000),
                 "stock_quantity": 200,
                 "status": "active",
             },
@@ -352,7 +351,7 @@ async def seed():
                 "name": "Ciprofloxacin 500mg",
                 "code": "MED005",
                 "unit": "Viên",
-                "current_price": Decimal("4000"),
+                "current_price": Decimal(4000),
                 "stock_quantity": 40,
                 "status": "active",
             },
@@ -360,7 +359,7 @@ async def seed():
                 "name": "Loratadine 10mg",
                 "code": "MED006",
                 "unit": "Viên",
-                "current_price": Decimal("2000"),
+                "current_price": Decimal(2000),
                 "stock_quantity": 150,
                 "status": "active",
             },
@@ -370,7 +369,7 @@ async def seed():
         await db.flush()
 
         print("📅 Đang sinh Lịch làm việc và Ca khám cho các Bác sĩ...")
-        today = date.today()
+        today = datetime.now(UTC).date()
         past_dates = [today - timedelta(days=i) for i in range(15, 0, -1)]
         future_dates = [today + timedelta(days=i) for i in range(14)]
         if today not in future_dates:
@@ -493,14 +492,43 @@ async def seed():
                 )
                 db.add(appt)
                 past_appointments_info.append(
-                    {"appt": appt, "doctor_id": chosen_doc_id}
+                    {
+                        "appt": appt,
+                        "doctor_id": chosen_doc_id,
+                        "work_date": chosen_date,
+                    }
                 )
                 chosen_slot.status = ScheduleSlotStatus.BOOKED
         await db.flush()
 
+        # Tạo examination, prescription và cập nhật medical record
+        symptoms = [
+            "Đau đầu, mệt mỏi",
+            "Sốt cao, ho",
+            "Đau bụng, buồn nôn",
+            "Khó thở, tức ngực",
+            "Đau lưng, mỏi gối",
+        ]
+        diagnoses = [
+            "Viêm họng cấp",
+            "Viêm phế quản",
+            "Rối loạn tiêu hóa",
+            "Tăng huyết áp",
+            "Thoái hóa khớp",
+        ]
+        disease_names = [
+            "Viêm họng",
+            "Viêm phế quản",
+            "Viêm dạ dày",
+            "Tăng huyết áp",
+            "Thoái hóa khớp",
+        ]
+
         for item in past_appointments_info:
             appt = item["appt"]
             doc_id = item["doctor_id"]
+            work_date = item.get("work_date", today)
+
             if appt.status in [AppointmentStatus.COMPLETED, AppointmentStatus.PAID]:
                 med_record = next(
                     (r for r in medical_records if r.patient_id == appt.patient_id),
@@ -508,38 +536,239 @@ async def seed():
                 )
                 if not med_record:
                     continue
+
+                symptom = random.choice(symptoms)
+                diagnosis = random.choice(diagnoses)
+                disease_name = random.choice(disease_names)
+                conclusion = "Nghỉ ngơi, uống thuốc theo đơn"
+
                 exam = Examination(
                     appointment_id=appt.id,
                     medical_record_id=med_record.id,
                     patient_id=appt.patient_id,
                     doctor_id=doc_id,
-                    symptom="Đau đầu, mệt mỏi",
-                    diagnosis="Viêm họng cấp / Rối loạn tiêu hóa",
-                    conclusion="Nghỉ ngơi, uống thuốc theo đơn",
-                    disease_name="Viêm họng",
+                    symptom=symptom,
+                    diagnosis=diagnosis,
+                    conclusion=conclusion,
+                    disease_name=disease_name,
                     status="completed",
                 )
                 db.add(exam)
                 await db.flush()
 
+                # CẬP NHẬT MEDICAL RECORD với kết quả khám
+                med_record.medical_history = (
+                    f"{med_record.medical_history or 'Khỏe mạnh'}; "
+                    f"Khám {work_date}: {diagnosis}"
+                )
+                med_record.note = (
+                    f"Kết quả khám gần nhất ({work_date}): {conclusion}. "
+                    f"Chẩn đoán: {disease_name}"
+                )
+                med_record.updated_date = datetime.now(UTC)
+
+                # Tạo prescription
                 pres = Prescription(
                     examination_id=exam.id,
                     prescription_type=1,
                     note="Uống sau khi ăn",
-                    total_amount=Decimal(50000),
+                    total_amount=Decimal(random.randint(50000, 300000)),
                     status=1,
                 )
                 db.add(pres)
                 await db.flush()
 
+                # Tạo prescription details
+                medicines = await db.execute(select(Medicine).limit(6))
+                medicine_list = medicines.scalars().all()
+                if medicine_list:
+                    for _ in range(random.randint(1, 3)):
+                        med = random.choice(medicine_list)
+                        quantity = random.randint(1, 3)
+                        pd = PrescriptionDetail(
+                            prescription_id=pres.id,
+                            medicine_id=med.id,
+                            quantity=quantity,
+                            unit_price=med.current_price,
+                            dosage=random.choice(
+                                ["1 viên/lần", "2 viên/lần", "1 gói/lần"]
+                            ),
+                            frequency=random.choice(
+                                ["2 lần/ngày", "3 lần/ngày", "1 lần/ngày"]
+                            ),
+                            duration=random.choice(["3 ngày", "5 ngày", "7 ngày"]),
+                            instruction=random.choice(["", "Sau ăn", "Trước ăn", None]),
+                            subtotal=Decimal(med.current_price * quantity),
+                        )
+                        db.add(pd)
+
+                # Tạo payment
                 payment = Payment(
                     appointment_id=appt.id,
-                    amount=Decimal(300000),
+                    amount=Decimal(random.randint(200000, 500000)),
                     status=PaymentStatus.SUCCESS,
-                    payment_method="Bank Transfer",
+                    payment_method=random.choice(["Bank Transfer", "Cash", "Momo"]),
                     transaction_id=f"TXN{random.randint(100000, 999999)}",
                 )
                 db.add(payment)
+
+        print("📌 Đang TẠO THÊM lịch khám demo cho bác sĩ doc_1...")
+        doctor_1 = None
+        for doc in doctors:
+            if doc.id == 2:
+                doctor_1 = doc
+                break
+
+        if not doctor_1:
+            user_result = await db.execute(select(User).where(User.username == "doc_1"))
+            user = user_result.scalar_one_or_none()
+            if user:
+                doctor_result = await db.execute(
+                    select(Doctor).where(Doctor.id == user.id)
+                )
+                doctor_1 = doctor_result.scalar_one_or_none()
+
+        if doctor_1:
+            print(f"✅ Tìm thấy bác sĩ doc_1 với ID={doctor_1.id}")
+            demo_patients = patients[:6]
+            statuses = [
+                AppointmentStatus.PENDING,
+                AppointmentStatus.CONFIRMED,
+                AppointmentStatus.CHECKING_IN,
+                AppointmentStatus.EXAMINING,
+                AppointmentStatus.COMPLETED,
+                AppointmentStatus.PAID,
+            ]
+            reasons = [
+                "Khám tổng quát",
+                "Đau đầu kéo dài",
+                "Đau bụng",
+                "Khám định kỳ",
+                "Tái khám",
+                "Kiểm tra sức khỏe",
+            ]
+
+            for idx, (pat, appt_status) in enumerate(zip(demo_patients, statuses)):
+                sched_check = await db.execute(
+                    select(Schedule).where(
+                        Schedule.doctor_id == doctor_1.id,
+                        Schedule.work_date == today,
+                    )
+                )
+                sched = sched_check.scalar_one_or_none()
+                if not sched:
+                    sched = Schedule(
+                        doctor_id=doctor_1.id,
+                        work_date=today,
+                        status=ScheduleStatus.OPEN,
+                    )
+                    db.add(sched)
+                    await db.flush()
+
+                slot_check = await db.execute(
+                    select(ScheduleSlot).where(
+                        ScheduleSlot.schedule_id == sched.id,
+                        ScheduleSlot.start_time == time(8 + idx, 0),
+                    )
+                )
+                slot = slot_check.scalar_one_or_none()
+
+                if not slot:
+                    slot = ScheduleSlot(
+                        schedule_id=sched.id,
+                        start_time=time(8 + idx, 0),
+                        end_time=time(8 + idx, 30),
+                        status=ScheduleSlotStatus.AVAILABLE,
+                    )
+                    db.add(slot)
+                    await db.flush()
+
+                appt = Appointment(
+                    patient_id=pat.id,
+                    slot_id=slot.id,
+                    booked_at=datetime.now(UTC) - timedelta(days=random.randint(0, 5)),
+                    reason=reasons[idx % len(reasons)],
+                    status=appt_status,
+                )
+                db.add(appt)
+                slot.status = ScheduleSlotStatus.BOOKED
+                await db.flush()
+
+                if appt_status in [AppointmentStatus.COMPLETED, AppointmentStatus.PAID]:
+                    med_record = next(
+                        (r for r in medical_records if r.patient_id == pat.id), None
+                    )
+                    if med_record:
+                        exam = Examination(
+                            appointment_id=appt.id,
+                            medical_record_id=med_record.id,
+                            patient_id=pat.id,
+                            doctor_id=doctor_1.id,
+                            symptom="Đau đầu, mệt mỏi",
+                            diagnosis="Viêm họng cấp",
+                            conclusion="Nghỉ ngơi, uống thuốc theo đơn",
+                            disease_name="Viêm họng",
+                            status="completed",
+                        )
+                        db.add(exam)
+                        await db.flush()
+
+                        # CẬP NHẬT MEDICAL RECORD
+                        med_record.medical_history = (
+                            f"{med_record.medical_history or 'Khỏe mạnh'}; "
+                            f"Khám {today}: Viêm họng cấp"
+                        )
+                        med_record.note = (
+                            f"Kết quả khám gần nhất ({today}): "
+                            f"Nghỉ ngơi, uống thuốc theo đơn. Chẩn đoán: Viêm họng"
+                        )
+                        med_record.updated_date = datetime.now(UTC)
+
+                        # Tạo prescription
+                        pres = Prescription(
+                            examination_id=exam.id,
+                            prescription_type=1,
+                            note="Uống sau khi ăn",
+                            total_amount=Decimal(50000),
+                            status=1,
+                        )
+                        db.add(pres)
+                        await db.flush()
+
+                        # Tạo prescription details
+                        medicines = await db.execute(select(Medicine).limit(3))
+                        medicine_list = medicines.scalars().all()
+                        if medicine_list:
+                            med = random.choice(medicine_list)
+                            quantity = random.randint(1, 2)
+                            pd = PrescriptionDetail(
+                                prescription_id=pres.id,
+                                medicine_id=med.id,
+                                quantity=quantity,
+                                unit_price=med.current_price,
+                                dosage="1 viên/lần",
+                                frequency="2 lần/ngày",
+                                duration="5 ngày",
+                                instruction="Sau ăn",
+                                subtotal=Decimal(med.current_price * quantity),
+                            )
+                            db.add(pd)
+
+                        # Tạo payment
+                        payment = Payment(
+                            appointment_id=appt.id,
+                            amount=Decimal(300000),
+                            status=PaymentStatus.SUCCESS,
+                            payment_method="Bank Transfer",
+                            transaction_id=f"TXN{random.randint(100000, 999999)}",
+                        )
+                        db.add(payment)
+            await db.flush()
+            print(
+                f"✅ Đã tạo thêm 6 lịch khám demo cho bác sĩ doc_1 (ID={doctor_1.id})"
+            )
+        else:
+            print("⚠️ Không tìm thấy bác sĩ doc_1")
 
         doctors_by_specialty = defaultdict(list)
         for doc in doctors:
@@ -595,7 +824,7 @@ async def seed():
                             patient_id=patient.id,
                             slot_id=new_slot.id,
                             booked_at=datetime.now(UTC),
-                            reason=f"Khám demo test luồng đặt lịch",
+                            reason="Khám demo test luồng đặt lịch",
                             status=AppointmentStatus.PENDING,
                         )
                         db.add(appt)

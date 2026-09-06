@@ -52,6 +52,14 @@ export default function PatientLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="person" color={color} size={size} /> 
         }} 
       />
+      <Tabs.Screen name="appointments/[appointmentId]" options={{ href: null }} />
+      <Tabs.Screen name="chat/[sessionId]" options={{ href: null }} />
+      <Tabs.Screen name="profile/edit" options={{ href: null }} />
+      <Tabs.Screen name="profile/change-password" options={{ href: null }} />
+      
+      <Tabs.Screen name="doctors" options={{ href: null }} />
+      <Tabs.Screen name="payments" options={{ href: null }} />
+      <Tabs.Screen name="specialties" options={{ href: null }} />
     </Tabs>
   );
 }

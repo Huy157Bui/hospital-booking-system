@@ -140,6 +140,16 @@ class PatientsBySpecialtyResponse(BaseModel):
     items: list[PatientsBySpecialtyItem]
     total_patients: int
 
+class PatientSummaryOut(BaseModel):
+    id: int
+    full_name: str
+    phone: str | None = None
+    date_of_birth: date | None = None
+    gender: str | None = None
+    total_visits: int
+    last_visit_date: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 class DoctorBase(BaseModel):
     specialty_id: int
@@ -702,16 +712,17 @@ class CheckAvailabilityInput(BaseModel):
     doctor_id: int = Field(
         ..., description="ID bác sĩ — PHẢI lấy từ kết quả search_doctors đã gọi trước đó"
     )
-    work_date: str = Field(
-        ..., description="Ngày muốn khám, định dạng YYYY-MM-DD"
-    )
+    work_date: str = Field(..., description="Ngày muốn khám, định dạng YYYY-MM-DD")
+
 
 class ListSpecialtiesInput(BaseModel):
     pass
 
+
 class BookAppointmentInput(BaseModel):
     slot_id: int = Field(
-        ..., description="ID khung giờ khám — PHẢI lấy từ kết quả check_availability đã gọi trước đó"
+        ...,
+        description="ID khung giờ khám — PHẢI lấy từ kết quả check_availability đã gọi trước đó",
     )
     reason: Optional[str] = Field(
         None, description="Lý do khám, chỉ để hiển thị cho người dùng xác nhận"
@@ -726,6 +737,8 @@ class SearchKnowledgeInput(BaseModel):
             "'quy trình tái khám'."
         ),
     )
+
+
 
 DoctorOut.model_rebuild()
 DoctorScheduleOut.model_rebuild()

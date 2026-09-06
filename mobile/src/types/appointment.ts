@@ -60,11 +60,52 @@ export interface Appointment {
   payment_status?: 'PENDING' | 'PAID' | 'FAILED';
 }
 
-export interface PrescriptionCreate {
-  medicine_name?: string;
-  dosage: string;
+export interface PrescriptionItemCreate {
+  medicine_id: number;
   quantity: number;
-  instruction: string;
+  dosage?: string;
+  frequency?: string;
+  duration?: string;
+  days?: number;
+  instruction?: string;
+}
+
+export interface PrescriptionCreate {
+  prescription_type: number;
+  note?: string;
+  items: PrescriptionItemCreate[];
+}
+
+export interface ExaminationRecord {
+  id: number;
+  appointment_id: number;
+  medical_record_id: number;
+  patient_id: number;
+  doctor_id: number;
+  
+  symptom?: string | null;
+  diagnosis?: string | null;
+  conclusion?: string | null;
+  disease_name?: string | null;
+  
+  height?: number | null;
+  weight?: number | null;
+  blood_pressure?: string | null;
+  heart_rate?: number | null;
+  temperature?: number | null;
+  
+  note?: string | null;
+  examined_at?: string | null;
+  status?: string | null;
+  
+  created_date: string;
+  updated_date?: string | null;
+  prescriptions?: PrescriptionCreate[] | null; 
+
+  appointment?: any; 
+  medical_record?: any;
+  patient?: any;
+  doctor?: any;
 }
 
 export interface ExaminationRecordCreate {

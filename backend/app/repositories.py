@@ -1,6 +1,6 @@
 import logging
 
-from app.schemas import PaymentOut
+from app.schemas import PaymentOut, ScheduleOut
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +302,21 @@ class ScheduleRepository(BaseRepository[Schedule]):
     def __init__(self, db: AsyncSession) -> None:
         super().__init__(Schedule, db)
 
+    async def get_schedules_by_doctor_id(self, doctor_id: int):
+
+        stmt = (
+            select(Schedule)
+            .where(Schedule.doctor_id == doctor_id)
+            .options(
+                selectinload(Schedule.slots),
+                selectinload(Schedule.doctor).selectinload(Doctor.user),
+                selectinload(Schedule.doctor).selectinload(Doctor.specialty),
+            )
+            .order_by(Schedule.work_date.asc())
+        )
+
+        result = await self.db.execute(stmt)
+        return list(result.scalars().unique().all())
 
     async def get_doctor_available_schedule(
             self, doctor_id: int, from_date: date | None = None
@@ -669,7 +684,45 @@ class ExaminationRepository(BaseRepository[Examination]):
             selectinload(Examination.patient).selectinload(Patient.user),
             selectinload(Examination.doctor).selectinload(Doctor.user),
             selectinload(Examination.doctor).selectinload(Doctor.specialty),
+            selectinload(Examination.appointment)
+            .selectinload(Appointment.slot)
+            .selectinload(ScheduleSlot.schedule),
         ]
+
+    async def get_patients_by_doctor_id(self, doctor_id: int) -> list[dict]:
+        """
+        Lấy danh sách bệnh nhân đã từng được bác sĩ này khám,
+        kèm tổng số lần khám và ngày khám gần nhất.
+        """
+        from sqlalchemy import select, func
+        from app.models import Patient, User, Examination
+
+        stmt = (
+            select(
+                Patient.id,
+                User.full_name,
+                User.phone,
+                Patient.date_of_birth,
+                Patient.gender,
+                func.count(Examination.id).label("total_visits"),
+                func.max(Examination.created_date).label("last_visit_date"),
+            )
+            .join(User, Patient.id == User.id)  # Shared PK: Patient.id == User.id
+            .join(Examination, Patient.id == Examination.patient_id)
+            .where(Examination.doctor_id == doctor_id)
+            .group_by(
+                Patient.id,
+                User.full_name,
+                User.phone,
+                Patient.date_of_birth,
+                Patient.gender,
+            )
+            .order_by(func.max(Examination.created_date).desc())
+        )
+
+        result = await self.db.execute(stmt)
+        # Trả về list of dict để Pydantic dễ dàng validate
+        return [dict(row._mapping) for row in result.all()]
 
     async def get_by_appointment(self, appointment_id: int) -> Examination | None:
         result = await self.db.execute(
@@ -680,7 +733,7 @@ class ExaminationRepository(BaseRepository[Examination]):
         return result.scalar_one_or_none()
 
     async def get_by_patient(
-        self, patient_id: int, *, skip: int = 0, limit: int = 100
+            self, patient_id: int, *, skip: int = 0, limit: int = 100
     ) -> list[Examination]:
         result = await self.db.execute(
             select(Examination)
@@ -1034,3 +1087,4 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
         for token in tokens:
             token.revoked = True
         await self.db.flush()
+

@@ -21,6 +21,7 @@ from app.dependencies.repos import (
     ChatMessageRepoDep,
     RefreshTokenRepoDep,
 )
+from app.repositories import MedicineRepository
 from app.services import (
     AIChatService,
     AppointmentService,
@@ -39,6 +40,7 @@ from app.services import (
     UserService,
     ChatSessionService,
     AgentChatService,
+    MedicineService,
 )
 
 
@@ -108,6 +110,7 @@ def get_doctor_service(
     schedule_repo: ScheduleRepoDep,
     appointment_repo: AppointmentRepoDep,
     slot_repo: ScheduleSlotRepoDep,
+    examination_repo: ExaminationRepoDep
 ) -> DoctorService:
     return DoctorService(
         doctor_repo=doctor_repo,
@@ -116,6 +119,7 @@ def get_doctor_service(
         schedule_repo=schedule_repo,
         appointment_repo=appointment_repo,
         slot_repo=slot_repo,
+        examination_repo=examination_repo
     )
 
 
@@ -168,6 +172,16 @@ def get_report_service(
 
 
 ReportServiceDep = Annotated[ReportService, Depends(get_report_service)]
+
+
+def get_medicine_service(
+    medicine_repo: MedicineRepoDep,
+) -> MedicineService:
+    return MedicineService(medicine_repo=medicine_repo)
+
+MedicineServiceDep = Annotated[MedicineService, Depends(get_medicine_service)]
+
+
 
 _rag_service_instance: RAGService | None = None
 _llm_service_instance: LLMService | None = None

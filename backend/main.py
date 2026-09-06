@@ -22,6 +22,7 @@ from app.routers import (
     appointments_router,
     payments_router,
     chat_router,
+    medicines_router,
 )
 from app.exceptions import AppException
 
@@ -51,3 +52,4 @@ app.include_router(appointments_router)
 app.include_router(payments_router)
 app.include_router(chat_router)
 app.include_router(reports_router)
+app.include_router(medicines_router)

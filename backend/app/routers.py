@@ -19,6 +19,7 @@ from app.dependencies.services import (
     PaymentServiceDep,
     SpecialtyServiceDep,
     UserServiceDep,
+    MedicineServiceDep,
 )
 from app.models import Patient, ScheduleSlot, User, Doctor, Appointment
 from app.schemas import (
@@ -54,6 +55,8 @@ from app.schemas import (
     RefreshTokenRequest,
     TokenRefreshResponse,
     DoctorAvailabilityOut,
+    PatientSummaryOut,
+    MedicineOut,
 )
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -148,18 +151,6 @@ async def get_my_chat_sessions(
     current_user: User = Depends(get_current_user),
 ):
     return await chat_session_service.get_user_sessions(current_user)
-
-
-@users_router.put("/me", response_model=UserOut)
-async def update_my_profile(
-    data: UserUpdate,
-    user_service: UserServiceDep,
-    patient_service: PatientServiceDep,
-    current_user: User = Depends(get_current_user),
-):
-    updated_user = await user_service.update_profile(current_user, data)
-
-    return updated_user
 
 appointments_router = APIRouter(prefix="/appointments", tags=["Appointments"])
 
@@ -271,26 +262,12 @@ async def get_specialty(specialty_id: int, specialty_service: SpecialtyServiceDe
 
 doctors_router = APIRouter(prefix="/doctors", tags=["Doctors"])
 
-
 @doctors_router.get("", response_model=list[DoctorOut])
 async def get_doctors(
     doctor_service: DoctorServiceDep,
     specialty_id: int | None = None,
 ):
     return await doctor_service.get_doctors(specialty_id)
-
-
-@doctors_router.get("/{doctor_id}", response_model=DoctorOut)
-async def get_doctor(doctor_id: int, doctor_service: DoctorServiceDep):
-
-    return await doctor_service.get_doctor(doctor_id)
-
-
-@doctors_router.get("/{doctor_id}/schedule", response_model=list[DoctorScheduleOut])
-async def get_doctor_schedule(doctor_id: int, doctor_service: DoctorServiceDep):
-
-    return await doctor_service.get_doctor_schedule(doctor_id)
-
 
 @doctors_router.get("/me/schedule", response_model=list[ScheduleOut])
 async def get_my_schedule(
@@ -299,6 +276,12 @@ async def get_my_schedule(
 ):
     return await doctor_service.get_my_schedule(current_user)
 
+@doctors_router.get("/me/patients", response_model=list[PatientSummaryOut])
+async def get_my_patients(
+    doctor_service: DoctorServiceDep,
+    current_doctor: Doctor = Depends(get_current_doctor_profile),
+):
+    return await doctor_service.get_my_patients(current_doctor)
 
 @doctors_router.put("/me/schedules/{schedule_id}", response_model=ScheduleOut)
 async def update_my_schedule(
@@ -307,10 +290,7 @@ async def update_my_schedule(
     doctor_service: DoctorServiceDep,
     current_doctor: User = Depends(check_doctor),
 ):
-    return await doctor_service.update_my_schedule(
-        current_doctor, schedule_id, schedule_data
-    )
-
+    return await doctor_service.update_my_schedule(current_doctor, schedule_id, schedule_data)
 
 @doctors_router.patch("/me/schedule-slots/{slot_id}", response_model=ScheduleSlotOut)
 async def update_my_schedule_slot(
@@ -319,6 +299,14 @@ async def update_my_schedule_slot(
     slot: ScheduleSlot = Depends(get_owned_schedule_slot),
 ):
     return await doctor_service.update_my_schedule_slot(slot, slot_data)
+
+@doctors_router.get("/{doctor_id}", response_model=DoctorOut)
+async def get_doctor(doctor_id: int, doctor_service: DoctorServiceDep):
+    return await doctor_service.get_doctor(doctor_id)
+
+@doctors_router.get("/{doctor_id}/schedule", response_model=list[DoctorScheduleOut])
+async def get_doctor_schedule(doctor_id: int, doctor_service: DoctorServiceDep):
+    return await doctor_service.get_doctor_schedule(doctor_id)
 
 
 patients_router = APIRouter(prefix="/patients", tags=["Patients"])
@@ -333,8 +321,10 @@ async def get_patient_medical_records(
     current_user: User = Depends(get_current_user),
 ):
     result = await patient_service.get_patient_medical_history_with_access(
-        patient_id, current_user
+        patient_id=patient_id,
+        current_user=current_user
     )
+
     return PatientMedicalHistoryOut(
         medical_record=result["medical_record"],
         examinations=result["examinations"],
@@ -349,6 +339,14 @@ async def get_payment_detail(
     current_user: User = Depends(get_current_user),
 ):
     return await payment_service.get_payment_detail(payment_id, current_user)
+
+medicines_router = APIRouter(prefix="/medicines", tags=["Medicines"])
+
+@medicines_router.get("", response_model=list[MedicineOut])
+async def get_medicines(
+    medicine_service: MedicineServiceDep,
+):
+    return await medicine_service.get_active_medicines()
 
 chat_router = APIRouter(prefix="/chat", tags=["Chatbot AI"])
 
