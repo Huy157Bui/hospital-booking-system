@@ -1278,7 +1278,6 @@ class DoctorSearchService:
                 if doctor.specialty and doctor.specialty.name:
                     doctor_specialty = self._normalize_text(doctor.specialty.name)
 
-                    # Chỉ match 1 chiều: search_specialty phải nằm TRONG doctor_specialty
                     if search_specialty in doctor_specialty:
                         filtered.append(doctor)
 
@@ -1727,7 +1726,6 @@ class AgentChatService:
         self.patient_service = patient_service
         self.legacy_chat_service = legacy_chat_service
 
-        # Dùng langchain_ollama (KHÔNG phải langchain_community)
         self.llm = ChatOllama(
             model=settings.OLLAMA_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
@@ -1754,11 +1752,9 @@ class AgentChatService:
         logger.info(f"\n{'='*60}\n>>> INCOMING: session={session_id} msg={user_message!r}\n{'='*60}")
         msg_lower = user_message.lower()
 
-        # 1. Emergency check — GIỮ NGUYÊN
         if self.emergency_service.check(msg_lower):
             return {"reply": self.emergency_service.get_response(), "suggestions": []}
 
-        # 2. Pending booking check
         pending = _pending_bookings.get(session_id)
         if pending:
             confirm_result = await self._handle_pending_confirmation(
@@ -1790,9 +1786,6 @@ class AgentChatService:
 
         return await self.legacy_chat_service.chat(user_message, chat_history)
 
-    # -----------------------------------------------------------------
-    # PENDING BOOKING CONFIRMATION
-    # -----------------------------------------------------------------
     async def _handle_pending_confirmation(
         self,
         session_id: int,
@@ -1846,7 +1839,6 @@ class AgentChatService:
                 "suggestions": ["Tìm bác sĩ khác", "Xem chuyên khoa"],
             }
 
-        # Không rõ ý — hỏi lại, KHÔNG xóa pending
         return {
             "reply": (
                 f"Bạn có muốn xác nhận đặt khung giờ đã đề xuất (mã slot #{pending['slot_id']}) không? "
@@ -1856,10 +1848,8 @@ class AgentChatService:
         }
 
     def _has_small_doctor_ids(self, content: str) -> bool:
-        """Phát hiện doctor_id nhỏ bất thường (dưới 100) trong content — dấu hiệu hallucinate"""
         if not content:
             return False
-        # Tìm tất cả pattern [#số]
         matches = re.findall(r'\[#(\d+)\]', content)
 
         for match in matches:
@@ -1871,15 +1861,12 @@ class AgentChatService:
         return False
 
     def _claims_booking_success_without_tool(self, content: str, tool_calls: list) -> bool:
-        """Phát hiện LLM tự claim đặt lịch thành công mà không gọi tool"""
         if tool_calls:
             return False
         if not content:
             return False
         content_lower = content.lower()
 
-        # FIX #2: Chỉ chặn khi claim THÀNH CÔNG, không chặn khi đang ĐỀ XUẤT
-        # Thêm các pattern "đề xuất" để loại trừ
         proposal_patterns = [
             "đề xuất",
             "bạn có muốn",
@@ -1889,16 +1876,13 @@ class AgentChatService:
             "xác nhận đặt",
         ]
 
-        # Nếu content chứa pattern đề xuất → KHÔNG phải claim success
         if any(p in content_lower for p in proposal_patterns):
             logger.info("  → Content là đề xuất, không phải claim success")
             return False
 
-        # Kiểm tra claim success
         return any(p in content_lower for p in self.BOOKING_SUCCESS_CLAIM_PATTERNS)
 
     def _is_in_booking_flow(self, user_message: str) -> bool:
-        """Kiểm tra xem tin nhắn HIỆN TẠI có phải đang trả lời xác nhận/hủy/chọn slot không"""
         logger.info(f"=== CHECK _is_in_booking_flow ===")
         logger.info(f"  user_message: {user_message!r}")
 
@@ -1941,7 +1925,6 @@ class AgentChatService:
         return False
 
     def _replace_hallucination(self, content: str) -> str:
-        """Chặn các câu trả lời ảo giác kiểu 'tôi sẽ gọi tool ngay sau đây'"""
         if not content:
             return content
 
@@ -1964,7 +1947,6 @@ class AgentChatService:
         return content
 
     async def _verify_doctor_exists(self, doctor_id: int) -> bool:
-        """Kiểm tra bác sĩ có tồn tại trong DB không"""
         try:
             doctor = await self.doctor_search.doctor_repo.get_by_id(doctor_id)
             return doctor is not None
@@ -1974,11 +1956,9 @@ class AgentChatService:
     def _extract_doctor_name_from_history(
         self, chat_history: list[Any] | None
     ) -> str | None:
-        """Extract doctor_name từ lịch sử hội thoại"""
         if not chat_history:
             return None
 
-        # Tìm pattern "bác sĩ [Tên]" hoặc "BS [Tên]" trong 5 turn gần nhất
 
         for turn in reversed(chat_history[-5:]):
             content = (
@@ -1986,24 +1966,21 @@ class AgentChatService:
                 if isinstance(turn, dict)
                 else getattr(turn, "content", "")
             )
-            # Pattern: "bác sĩ X" hoặc "BS X" (X là tên, có thể có dấu)
             matches = re.findall(
                 r"(?:bác sĩ|BS|bs)\s+([A-ZÀ-Ỹ][a-zà-ỹ]*(?:\s+[A-ZÀ-Ỹ][a-zà-ỹ]*)+)",
                 content,
             )
             if matches:
-                return matches[-1]  # Lấy tên gần nhất
+                return matches[-1]
 
         return None
 
     def _parse_doctor_id_from_history(
         self, chat_history: list[Any] | None
     ) -> int | None:
-        """Parse doctor_id từ pattern [#4228] — ưu tiên turn GẦN NHẤT, không dùng Counter"""
         if not chat_history:
             return None
 
-        # Duyệt từ turn gần nhất về cũ, lấy ID đầu tiên tìm thấy
         for turn in reversed(chat_history[-10:]):
             content = (
                 turn.get("content", "")
@@ -2012,7 +1989,7 @@ class AgentChatService:
             )
             matches = re.findall(r"\[#(\d{3,})\]", content)
             if matches:
-                doctor_id = int(matches[-1])  # Lấy ID cuối cùng trong turn gần nhất
+                doctor_id = int(matches[-1])
                 logger.info(
                     f"  Parse doctor_id từ history (turn gần nhất): {doctor_id}"
                 )
@@ -2047,7 +2024,6 @@ class AgentChatService:
     def _extract_availability_intent(
         self, user_message: str, chat_history
     ) -> dict | None:
-        """Deterministic: phát hiện intent xem lịch trống, không hỏi LLM"""
 
         msg = user_message.lower()
 
@@ -2078,7 +2054,6 @@ class AgentChatService:
         }
 
     def _parse_doctor_id_from_message(self, user_message: str) -> int | None:
-        """Parse doctor_id trực tiếp từ message — pattern [#1234]"""
 
         matches = re.findall(r"\[#(\d+)\]", user_message)
         if matches:
@@ -2118,17 +2093,13 @@ class AgentChatService:
         return False
 
     async def _extract_search_intent(self, user_message: str) -> dict | None:
-        """Deterministic: không hỏi ý LLM có gọi tool hay không."""
         msg = user_message.lower()
         if not any(re.search(p, msg) for p in self.SEARCH_DOCTOR_PATTERNS):
             return None
 
-        # Tách specialty_name — pass-through nguyên văn, không validate
         specialty_name = await self._extract_specialty_from_message(user_message)
-        # Tách doctor_name — FIX #3: Chỉ gán nếu có pattern rõ ràng
         doctor_name = self._extract_doctor_name_from_message(user_message)
 
-        # FIX #3: Nếu doctor_name trùng với specialty_name → bỏ doctor_name
         if (
             doctor_name
             and specialty_name
@@ -2139,11 +2110,8 @@ class AgentChatService:
             )
             doctor_name = None
 
-        # Tách max_fee
         max_fee = self._extract_max_fee_from_message(user_message)
 
-        # Nếu không tách được specialty từ "chuyên khoa X" pattern,
-        # thử tách từ "khám X" hoặc "đặt lịch khám X"
         if not specialty_name and not doctor_name:
             msg_lower = user_message.lower()
             if not re.search(r"giá\s+khám|giá\s+dưới|giá\s+trên", msg_lower):
@@ -2187,18 +2155,15 @@ class AgentChatService:
     async def _extract_specialty_from_message(self, user_message: str) -> str | None:
         msg = user_message.strip()
 
-        # Pattern 1: "chuyên khoa X"
         spec_match = re.search(r"chuyên khoa\s+([^\d,.!?]+)", msg, re.IGNORECASE)
         if spec_match:
             result = spec_match.group(1).strip()
             if result:
                 return result
 
-        # Pattern 2: "tim mach" / "tim mạch"
         if re.search(r"tim\s*m[ạa]ch", msg, re.IGNORECASE):
             return "Tim Mạch"
 
-        # Pattern 3: Tìm tên khoa đầy đủ từ DB
         if self.specialty_service:
             try:
                 specialties = await self.specialty_service.get_specialties()
@@ -2206,25 +2171,21 @@ class AgentChatService:
                 for s in specialties:
                     s_norm = self._normalize_specialty_text(s.name)
                     if s_norm and s_norm in msg_norm:
-                        return s.name   # TRẢ TÊN ĐẦY ĐỦ
+                        return s.name
             except Exception:
                 pass
 
-        # Fallback cuối cùng: dùng SpecialtyDetectionService (tên ngắn)
         return self.specialty_detector.detect(user_message)
 
     def _extract_doctor_name_from_message(self, user_message: str) -> str | None:
-        """Tách doctor_name từ message — chỉ bắt khi có 'tên' hoặc 'bác sĩ' rõ ràng"""
         msg = user_message.strip()
 
-        # Pattern 1: "tên X" — bắt cụm sau "tên" cho đến dấu câu
         name_match = re.search(r"tên\s+([^\d,.!?]+)", msg, re.IGNORECASE)
         if name_match:
             result = name_match.group(1).strip()
             if result:
                 return result
 
-        # Pattern 2: "bác sĩ X" hoặc "BS X" — phải có họ tên đầy đủ (2 từ trở lên)
         patterns = [
             r"(?:bác sĩ|BS)\s+([A-ZÀ-Ỹ][a-zà-ỹ]+(?:\s+[A-ZÀ-Ỹ][a-zà-ỹ]+)+)",
         ]
@@ -2233,15 +2194,11 @@ class AgentChatService:
             if match:
                 return match.group(1).strip()
 
-        # FIX #3: KHÔNG bắt specialty làm doctor_name
-        # Chỉ return khi có pattern rõ ràng, không dùng fallback khác
         return None
 
     def _extract_max_fee_from_message(self, user_message: str) -> float | None:
-        """Tách max_fee từ message"""
         msg = user_message.lower()
 
-        # Pattern: "dưới X nghìn/k"
         fee_match = re.search(r"dưới\s+(\d+)\s*(nghìn|ngàn|k)?", msg)
         if fee_match:
             val = int(fee_match.group(1))
@@ -2256,7 +2213,6 @@ class AgentChatService:
         return None
 
     async def _find_doctor_id_by_name(self, doctor_name: str) -> int | None:
-        """Tìm doctor_id từ tên bác sĩ"""
         try:
             doctors, found = await self.doctor_search.search(doctor_name=doctor_name)
             if found and doctors:
@@ -2265,9 +2221,6 @@ class AgentChatService:
             pass
         return None
 
-    # -----------------------------------------------------------------
-    # BUILD TOOLS — DÙNG StructuredTool
-    # -----------------------------------------------------------------
     def _build_tools(self, has_patient: bool) -> list:
         tools = [
             StructuredTool.from_function(
@@ -2313,9 +2266,6 @@ class AgentChatService:
 
         return tools
 
-    # -----------------------------------------------------------------
-    # HISTORY TO MESSAGES
-    # -----------------------------------------------------------------
     def _history_to_messages(self, chat_history: list[Any] | None) -> list:
         messages: list = [SystemMessage(content=self.SYSTEM_PROMPT)]
 
@@ -2337,9 +2287,6 @@ class AgentChatService:
                     messages.append(HumanMessage(content=content))
         return messages
 
-    # -----------------------------------------------------------------
-    # AGENT LOOP — ĐÃ SỬA LỖI FALLBACK THEO VÒNG
-    # -----------------------------------------------------------------
     async def _run_agent(
         self, session_id, user_message, chat_history, current_user, patient
     ):
@@ -2360,7 +2307,6 @@ class AgentChatService:
                     "suggestions": ["Tìm bác sĩ khác", "Liên hệ hotline"],
                 }
 
-            # FIX: Lưu context để dùng cho bước đặt lịch sau này
             _last_availability[session_id] = {
                 "doctor_id": tool_result.get("doctor_id"),
                 "work_date": tool_result.get("work_date"),
@@ -2381,7 +2327,6 @@ class AgentChatService:
                     "suggestions": ["Tìm bác sĩ khác", "Xem chuyên khoa"],
                 }
 
-            # Format danh sách slot thật
             formatted_slots = []
             for idx, slot in enumerate(slots, 1):
                 formatted_slots.append(
@@ -2403,20 +2348,17 @@ class AgentChatService:
             )
 
             if tool_result.get("found"):
-                # Dùng formatted_text trực tiếp, không qua LLM
                 return {
                     "reply": tool_result["formatted_text"],
                     "suggestions": ["Xem lịch trống", "Đặt lịch khám"],
                 }
             else:
-                # Không tìm thấy — thông báo rõ ràng
                 message = tool_result.get("message", "Không tìm thấy bác sĩ phù hợp.")
                 logger.info(f"  Search không tìm thấy: {message}")
                 return {
                     "reply": message,
                     "suggestions": ["Tìm bác sĩ khác", "Xem chuyên khoa", "Liên hệ hotline"],
                 }
-        # LOG: Bắt đầu agent loop
         logger.info("=" * 60)
         logger.info(f"AGENT LOOP BẮT ĐẦU - User: {current_user.username}")
         logger.info(f"Message: {user_message}")
@@ -2441,10 +2383,8 @@ class AgentChatService:
                     }
             tool_calls = getattr(ai_response, "tool_calls", None) or []
 
-            # FIX: Kiểm tra booking flow TRƯỚC khi guard claim success
             if not tool_calls and self._is_in_booking_flow(user_message):
                 logger.info("  → Đang trong booking flow, xử lý deterministic")
-                # Không chặn ở đây — sẽ xử lý ở block bên dưới
                 pass
             elif self._claims_booking_success_without_tool(
                     getattr(ai_response, "content", ""), tool_calls
@@ -2455,7 +2395,6 @@ class AgentChatService:
                     "suggestions": ["Xem lịch trống", "Tìm bác sĩ"],
                 }
 
-            # LOG: Kết quả LLM
             logger.info(f"Round {_round + 1}:")
             logger.info(
                 f"  Content: {ai_response.content[:100] if ai_response.content else 'None'}"
@@ -2466,7 +2405,6 @@ class AgentChatService:
                 logger.info(f"    → {call['name']}({call.get('args', {})})")
 
             if not tool_calls and _round == 0:
-                # Thử retry 1 lần với system prompt nhắc mạnh hơn
                 logger.warning(
                     "  → LLM không gọi tool ở round 0, retry với prompt mạnh hơn"
                 )
@@ -2494,20 +2432,16 @@ class AgentChatService:
                         messages = retry_messages
                     else:
                         logger.warning("  ❌ Retry vẫn không gọi tool")
-                        # Rơi xuống xử lý bên dưới
                 except asyncio.TimeoutError:
                     logger.error("  ❌ Retry timeout")
-                    # Rơi xuống xử lý bên dưới
 
             if not tool_calls:
                 if _round == 0:
-                    # Kiểm tra xem có đang giữa flow đặt lịch không
                     if self._is_in_booking_flow(user_message):
                         logger.warning("  → Đang giữa flow đặt lịch, xử lý trực tiếp")
 
                         msg_lower = user_message.lower()
 
-                        # Xử lý HỦY
                         if any(
                             k in msg_lower for k in ["hủy", "thôi", "cancel", "đổi ý"]
                         ):
@@ -2517,7 +2451,6 @@ class AgentChatService:
                                 "suggestions": ["Tìm bác sĩ khác", "Xem chuyên khoa"],
                             }
 
-                        # Xử lý XÁC NHẬN
                         if any(
                             k in msg_lower
                             for k in [
@@ -2551,9 +2484,7 @@ class AgentChatService:
                                         "Đặt lịch khám",
                                     ],
                                 }
-                        # Xử lý CHỌN KHUNG GIỜ
                         if any(k in msg_lower for k in ["khung giờ", "slot"]):
-                            # Parse slot_id TRỰC TIẾP từ message trước
                             slot_id_match = re.search(r"#(\d+)", user_message)
                             if slot_id_match:
                                 requested_slot_id = int(slot_id_match.group(1))
@@ -2563,7 +2494,6 @@ class AgentChatService:
                             else:
                                 requested_slot_id = None
 
-                            # NẾU CÓ slot_id → tra thẳng DB, không cần đoán work_date
                             if requested_slot_id:
                                 logger.info(
                                     f"  Tra DB trực tiếp slot_id={requested_slot_id}..."
@@ -2607,7 +2537,6 @@ class AgentChatService:
                                     "suggestions": ["Xác nhận đặt lịch", "Hủy bỏ"],
                                 }
 
-                            # KHÔNG CÓ slot_id → dùng _last_availability
                             last_ctx = _last_availability.get(session_id)
                             if last_ctx:
                                 logger.info(
@@ -2617,7 +2546,6 @@ class AgentChatService:
                                 work_date = last_ctx["work_date"]
                                 slots = last_ctx.get("slots", [])
                             else:
-                                # Fallback: parse từ message/history
                                 doctor_id = self._parse_doctor_id_from_message(
                                     user_message
                                 )
@@ -2625,7 +2553,7 @@ class AgentChatService:
                                     doctor_id = self._parse_doctor_id_from_history(
                                         chat_history
                                     )
-                                work_date = "2026-09-15"  # TODO: Cần lấy từ context
+                                work_date = "2026-09-15"
                                 slots = []
 
                             if not doctor_id:
@@ -2637,7 +2565,6 @@ class AgentChatService:
                                     ],
                                 }
 
-                            # Nếu có slots từ context → dùng luôn
                             if slots:
                                 selected_slot = slots[0]
                                 slot_id = selected_slot["slot_id"]
@@ -2654,7 +2581,6 @@ class AgentChatService:
                                     "suggestions": ["Xác nhận đặt lịch", "Hủy bỏ"],
                                 }
 
-                            # Nếu không có slots trong context → gọi check_availability
                             try:
                                 availability_result = await self._execute_read_tool(
                                     "check_availability",
@@ -2669,7 +2595,6 @@ class AgentChatService:
                                         "suggestions": ["Tìm bác sĩ khác", "Xem chuyên khoa"],
                                     }
 
-                                # Lưu context cho lần sau
                                 _last_availability[session_id] = {
                                     "doctor_id": doctor_id,
                                     "work_date": work_date,
@@ -2700,17 +2625,13 @@ class AgentChatService:
                                     "suggestions": ["Tìm bác sĩ khác", "Liên hệ hotline"],
                                 }
 
-                    # Nếu LLM đã tự trả lời hợp lý (có content), dùng luôn thay vì fallback
                     if ai_response.content and len(ai_response.content.strip()) > 10:
                         content = self._replace_hallucination(ai_response.content)
-                        # Kiểm tra content có chứa ID nhỏ bất thường không (hallucinate)
                         content_with_small_ids = self._has_small_doctor_ids(ai_response.content)
                         if content_with_small_ids:
                             logger.warning(f"  → Content chứa doctor_id nhỏ bất thường, có thể hallucinate — fallback legacy")
                             return await self.legacy_chat_service.chat(user_message, chat_history)
 
-                        # Kiểm tra xem intent hiện tại có cần dữ liệu thật không
-                        # Nếu cần → không dùng content trực tiếp, phải gọi tool
                         if self._requires_tool_call(user_message):
                             logger.error(f"  🚨 Intent cần tool nhưng LLM không gọi — từ chối thay vì dùng content bịa")
                             return {
@@ -2742,16 +2663,13 @@ class AgentChatService:
                 call_id = call.get("id", tool_name)
 
                 if tool_name == "book_appointment":
-                    # Validate args trước khi xử lý
                     try:
                         validated = BookAppointmentInput(**tool_args)
                         proposal_result = await self._propose_booking(
                             session_id, validated.model_dump()
                         )
                     except ValidationError:
-                        # Log lỗi kỹ thuật ở server
                         logger.warning("Invalid booking args: %s", tool_args)
-                        # Trả message thân thiện cho user
                         proposal_result = {
                             "reply": "Thông tin đặt lịch chưa hợp lệ, bạn vui lòng chọn lại khung giờ.",
                             "suggestions": ["Xem lịch trống bác sĩ", "Tìm bác sĩ khác"],
@@ -2773,7 +2691,6 @@ class AgentChatService:
                     logger.exception("Tool %s lỗi với args %s", tool_name, tool_args)
                     tool_result = {"error": "Không lấy được dữ liệu, vui lòng thử lại."}
 
-                    # Nếu là search_doctors và tìm thấy, trả thẳng formatted_text không qua LLM
                 if tool_name == "search_doctors" and tool_result.get("found"):
                     return {
                         "reply": tool_result["formatted_text"],
@@ -2790,10 +2707,8 @@ class AgentChatService:
                 )
 
             if proposal_result is not None:
-                # book_appointment là bước cuối — trả lời ngay bằng đề xuất
                 return proposal_result
 
-        # Hết số vòng — sinh câu trả lời cuối từ tool data đã thu thập
         try:
             final = await asyncio.wait_for(
                 self.llm.ainvoke(messages),
@@ -2814,9 +2729,6 @@ class AgentChatService:
             ],
         }
 
-    # -----------------------------------------------------------------
-    # TOOL EXECUTION (READ ONLY — an toàn)
-    # -----------------------------------------------------------------
     async def _execute_read_tool(self, tool_name: str, args: dict, chat_history: list[Any] | None = None) -> Any:
         logger.info(f"=== EXECUTE TOOL: {tool_name} ===")
         logger.info(f"=== TOOL ARGS: {args} ===")
@@ -2835,7 +2747,6 @@ class AgentChatService:
             )
 
             if not found:
-                # Tạo message chi tiết hơn
                 if validated.specialty_name:
                     message = f"Không tìm thấy bác sĩ thuộc chuyên khoa '{validated.specialty_name}'."
                 elif validated.doctor_name:
@@ -2846,7 +2757,6 @@ class AgentChatService:
                     message = "Không tìm thấy bác sĩ phù hợp."
                 return {"found": False, "message": message}
 
-            # FIX: Trả về format rõ ràng với doctor_id
             doctors_list = []
             for idx, d in enumerate(doctors, 1):
                 doctors_list.append(
@@ -2874,7 +2784,6 @@ class AgentChatService:
             }
 
         if tool_name == "check_availability":
-            # Validate args
             try:
                 validated = CheckAvailabilityInput(**args)
             except ValidationError:
@@ -2886,7 +2795,6 @@ class AgentChatService:
             except ValueError:
                 return {"error": "Ngày không hợp lệ, cần định dạng YYYY-MM-DD."}
 
-                # VALIDATE doctor_id: Nếu LLM trả về ID không tồn tại, thử tìm từ history
             doctor_id = validated.doctor_id
             doctor_exists = await self._verify_doctor_exists(doctor_id)
 
@@ -2895,7 +2803,6 @@ class AgentChatService:
                     f"Doctor ID {doctor_id} không tồn tại, thử parse từ history"
                 )
 
-                # Parse doctor_id từ chat_history (pattern [#4228])
                 doctor_id_from_history = self._parse_doctor_id_from_history(
                     chat_history
                 )
@@ -2906,7 +2813,6 @@ class AgentChatService:
                     )
                     doctor_id = doctor_id_from_history
                 else:
-                    # Thử tìm theo tên
                     doctor_name_from_history = self._extract_doctor_name_from_history(
                         chat_history
                     )
@@ -2920,7 +2826,6 @@ class AgentChatService:
                     else:
                         return {"error": "Không tìm thấy bác sĩ với ID đã cho."}
 
-            # ĐÚNG: Truyền doctor_id và work_date riêng biệt
             data = await self.appointment_service.get_doctor_availability(
                 doctor_id=doctor_id,
                 work_date=work_date,
@@ -2977,9 +2882,6 @@ class AgentChatService:
 
         raise ValueError(f"Tool không xác định: {tool_name}")
 
-    # -----------------------------------------------------------------
-    # BOOK APPOINTMENT PROPOSAL — CHỈ ĐỀ XUẤT, KHÔNG GHI DỮ LIỆU
-    # -----------------------------------------------------------------
     async def _propose_booking(self, session_id: int, validated_data: dict) -> dict:
         slot_id = validated_data.get("slot_id")
         reason = validated_data.get("reason")
@@ -2990,7 +2892,6 @@ class AgentChatService:
                 "suggestions": ["Xem lịch trống bác sĩ"],
             }
 
-        # Lưu vào module-level dict
         _pending_bookings[session_id] = {"slot_id": slot_id, "reason": reason}
 
         reply = f"Bạn xác nhận đặt khung giờ khám mã #{slot_id}"
@@ -3077,7 +2978,6 @@ class ChatSessionService:
             ChatMessage(session_id=session.id, role="user", content=content)
         )
 
-        # SỬA: Thay đổi từ ai_chat_service thành agent_chat_service
         result = await self.agent_chat_service.chat(
             session_id=session_id,
             user_message=content,

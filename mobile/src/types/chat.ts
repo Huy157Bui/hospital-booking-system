@@ -1,20 +1,18 @@
-// src/types/chat.ts
-
 export type ChatRole = 'user' | 'assistant' | 'system';
 
 export interface ChatMessage {
-  id: number;              // Khớp với Integer trong backend
-  session_id: number;      // Khớp với ForeignKey integer
+  id: number;            
+  session_id: number;     
   role: ChatRole;
   content: string;
-  created_date: string;    // Khớp với tên cột created_date (DateTime)
+  created_date: string;    
 }
 
 export interface ChatSession {
-  id: number;              // Khớp với Integer trong backend
-  user_id: number;         // Khớp với ForeignKey integer
+  id: number;             
+  user_id: number;         
   title?: string;          
-  created_date: string;    // Khớp với tên cột created_date
-  updated_date: string;    // Khớp với tên cột updated_date
-  messages?: ChatMessage[]; // Optional, tùy API có trả về kèm message hay không
+  created_date: string;  
+  updated_date: string; 
+  messages?: ChatMessage[]; 
 }

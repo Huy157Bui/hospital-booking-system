@@ -4,7 +4,6 @@ from typing import Optional
 import aiohttp
 import re
 
-# ============ CONFIG ============
 BASE_URL = "http://localhost:8000"
 AUTH_REGISTER_URL = f"{BASE_URL}/auth/register"
 AUTH_LOGIN_URL = f"{BASE_URL}/auth/login"
@@ -24,13 +23,11 @@ REGISTER_DATA = {
     "role": "PATIENT",
 }
 
-# ============ ASSERTION HELPERS ============
 PASS_COUNT = 0
 FAIL_COUNT = 0
 
 
 def assert_true(condition, message, actual_value=None):
-    """Assertion helper"""
     global PASS_COUNT, FAIL_COUNT
     if condition:
         PASS_COUNT += 1
@@ -43,15 +40,11 @@ def assert_true(condition, message, actual_value=None):
 
 
 def assert_contains(text, keyword, message):
-    """Kiểm tra text chứa keyword (case-insensitive)"""
     assert_true(keyword.lower() in text.lower() if text else False, message)
 
 
-# ============ HELPER FUNCTIONS ============
-
 
 async def register_if_needed(session: aiohttp.ClientSession):
-    """Đăng ký user nếu chưa tồn tại"""
     print("\n[1] Đăng ký user...")
     try:
         async with session.post(AUTH_REGISTER_URL, json=REGISTER_DATA) as resp:
@@ -67,7 +60,6 @@ async def register_if_needed(session: aiohttp.ClientSession):
 
 
 async def register_user_2(session: aiohttp.ClientSession):
-    """Đăng ký user thứ 2 cho test double-booking"""
     print("\n[1.5] Đăng ký user 2...")
     user_2_data = {
         "username": "test_user_2",
@@ -95,7 +87,6 @@ async def login(
     username: str = "test_user",
     password: str = "Test@123456",
 ) -> Optional[str]:
-    """Đăng nhập và lấy access token"""
     print(f"\n[2] Đăng nhập {username}...")
     try:
         async with session.post(
@@ -119,7 +110,6 @@ async def login(
 async def create_chat_session(
     session: aiohttp.ClientSession, token: str
 ) -> Optional[int]:
-    """Tạo chat session mới"""
     print("\n[3] Tạo chat session...")
     try:
         headers = {
@@ -150,7 +140,6 @@ async def send_message(
     session_id: int,
     message: str,
 ) -> Optional[dict]:
-    """Gửi tin nhắn và nhận response"""
     print(f"\n  📤 Gửi: '{message}'")
     try:
         headers = {
@@ -167,7 +156,6 @@ async def send_message(
             response_text = await resp.text()
             print(f"  📥 Status: {resp.status}")
 
-            # In đầy đủ content, không cắt
             try:
                 response_json = json.loads(response_text)
                 assistant_content = response_json.get("assistant_message", {}).get(
@@ -186,11 +174,9 @@ async def send_message(
 
 
 def extract_content(result: dict) -> str:
-    """Extract content từ response"""
     if not result:
         return ""
 
-    # Thử các cấu trúc response khác nhau
     if "assistant_message" in result:
         msg = result["assistant_message"]
         if isinstance(msg, dict):
@@ -209,11 +195,8 @@ def extract_content(result: dict) -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
-# ============ TEST SCENARIOS ============
-
 
 async def test_1_basic_search(session, token, session_id):
-    """Test: Tìm bác sĩ theo chuyên khoa"""
     print("\n" + "=" * 70)
     print("TEST 1: Tìm bác sĩ tim mạch (có dấu)")
     print("=" * 70)
@@ -234,7 +217,6 @@ async def test_1_basic_search(session, token, session_id):
 
 
 async def test_2_search_no_accent(session, token, session_id):
-    """Test: Tìm bác sĩ không dấu"""
     print("\n" + "=" * 70)
     print("TEST 2: Tìm bác sĩ tim mạch (KHÔNG dấu)")
     print("=" * 70)
@@ -250,7 +232,6 @@ async def test_2_search_no_accent(session, token, session_id):
 
 
 async def test_3_emergency(session, token, session_id):
-    """Test: Emergency response"""
     print("\n" + "=" * 70)
     print("TEST 3: Emergency response (không qua LLM)")
     print("=" * 70)
@@ -267,7 +248,6 @@ async def test_3_emergency(session, token, session_id):
 
 
 async def test_4_search_by_name(session, token, session_id):
-    """Test: Tìm theo tên bác sĩ"""
     print("\n" + "=" * 70)
     print("TEST 4: Tìm bác sĩ theo tên")
     print("=" * 70)
@@ -287,7 +267,6 @@ async def test_4_search_by_name(session, token, session_id):
 
 
 async def test_5_search_by_fee(session, token, session_id):
-    """Test: Tìm theo giá"""
     print("\n" + "=" * 70)
     print("TEST 5: Tìm bác sĩ giá dưới 300k")
     print("=" * 70)
@@ -326,18 +305,15 @@ async def test_5_search_by_fee(session, token, session_id):
 
 
 async def test_6_multi_turn_booking_flow(session, token, session_id):
-    """Test QUAN TRỌNG NHẤT: Luồng đặt lịch qua nhiều lượt chat"""
     print("\n" + "=" * 70)
     print("TEST 6: LUỒNG ĐẶT LỊCH ĐẦY ĐỦ (Multi-turn)")
     print("=" * 70)
 
-    # Bước 1: Tìm bác sĩ
     print("\n--- Bước 1: Tìm bác sĩ tim mạch ---")
     result = await send_message(session, token, session_id, "Tìm bác sĩ tim mạch")
     content = extract_content(result)
     assert_contains(content, "tim mạch", "Bước 1: Tìm thấy bác sĩ Tim Mạch")
 
-    # Extract doctor_name từ response (lấy tên bác sĩ đầu tiên)
     doctor_name = None
     if content:
         lines = content.split("\n")
@@ -355,13 +331,12 @@ async def test_6_multi_turn_booking_flow(session, token, session_id):
     if not doctor_name:
         print("  ⚠️ Không extract được tên bác sĩ từ response")
         print(f"  Content: {content[:500]}")
-        doctor_name = "Đặng Minh Hải"  # Fallback
+        doctor_name = "Đặng Minh Hải"
 
     print(f"  ℹ️ Sử dụng tên bác sĩ: {doctor_name}")
 
     await asyncio.sleep(1)
 
-    # Bước 2: Xem lịch trống
     print(f"\n--- Bước 2: Xem lịch trống của {doctor_name} ---")
     result = await send_message(
         session,
@@ -380,7 +355,6 @@ async def test_6_multi_turn_booking_flow(session, token, session_id):
 
     await asyncio.sleep(1)
 
-    # Bước 3: Đề xuất đặt lịch
     print("\n--- Bước 3: Đề xuất đặt lịch ---")
     result = await send_message(
         session, token, session_id, "Đặt cho tôi khung giờ đầu tiên"
@@ -399,7 +373,6 @@ async def test_6_multi_turn_booking_flow(session, token, session_id):
 
     await asyncio.sleep(1)
 
-    # Bước 4: Xác nhận đặt lịch (HTTP request RIÊNG BIỆT)
     print("\n--- Bước 4: Xác nhận đặt lịch (request riêng) ---")
     result = await send_message(session, token, session_id, "Xác nhận đặt lịch")
     content = extract_content(result)
@@ -412,7 +385,6 @@ async def test_6_multi_turn_booking_flow(session, token, session_id):
         actual_value=content,
     )
 
-    # Kiểm tra DB thật — Appointment tồn tại
     if match:
         appt_id = int(match.group(1))
         try:
@@ -436,7 +408,6 @@ async def test_6_multi_turn_booking_flow(session, token, session_id):
 
 
 async def test_7_not_found_specialty(session, token, session_id):
-    """Test: Chuyên khoa không tồn tại"""
     print("\n" + "=" * 70)
     print("TEST 7: Chuyên khoa không tồn tại")
     print("=" * 70)
@@ -457,17 +428,14 @@ async def test_7_not_found_specialty(session, token, session_id):
 
 
 async def test_8_decline_booking(session, token, session_id):
-    """Test: Hủy đề xuất đặt lịch"""
     print("\n" + "=" * 70)
     print("TEST 8: Hủy đề xuất đặt lịch")
     print("=" * 70)
 
-    # Đề xuất đặt lịch
     result = await send_message(session, token, session_id, "Đặt lịch khám tim mạch")
 
     await asyncio.sleep(1)
 
-    # Hủy
     result = await send_message(session, token, session_id, "Hủy bỏ, tôi đổi ý")
 
     content = extract_content(result)
@@ -482,12 +450,10 @@ async def test_8_decline_booking(session, token, session_id):
 
 
 async def test_9_double_booking(session, token, token_2, session_id_1, session_id_2):
-    """Test: 2 user khác nhau cùng đặt 1 slot — user 2 phải bị reject"""
     print("\n" + "=" * 70)
     print("TEST 9: Đặt trùng slot (double-booking)")
     print("=" * 70)
 
-    # User 1: Tìm bác sĩ tim mạch → xem lịch → đặt slot đầu tiên
     print("\n--- User 1: Tìm và đặt slot đầu tiên ---")
     result = await send_message(session, token, session_id_1, "Tìm bác sĩ tim mạch")
     content = extract_content(result)
@@ -502,7 +468,6 @@ async def test_9_double_booking(session, token, token_2, session_id_1, session_i
         return
     doctor_id = int(doctor_id_match.group(1))
 
-    # Xem lịch trống
     result = await send_message(
         session,
         token,
@@ -517,13 +482,11 @@ async def test_9_double_booking(session, token, token_2, session_id_1, session_i
         return
     slot_id = int(slot_id_match.group(1))
 
-    # Đặt slot
     result = await send_message(
         session, token, session_id_1, f"Đặt cho tôi khung giờ #{slot_id}"
     )
     content = extract_content(result)
 
-    # Xác nhận
     result = await send_message(session, token, session_id_1, "Xác nhận đặt lịch")
     content = extract_content(result)
 
@@ -536,12 +499,10 @@ async def test_9_double_booking(session, token, token_2, session_id_1, session_i
 
     await asyncio.sleep(1)
 
-    # User 2: Tìm bác sĩ tim mạch → xem lịch → cố đặt cùng slot
     print("\n--- User 2: Cố đặt cùng slot ---")
     result = await send_message(session, token_2, session_id_2, "Tìm bác sĩ tim mạch")
     content = extract_content(result)
 
-    # Xem lịch trống
     result = await send_message(
         session,
         token_2,
@@ -550,13 +511,11 @@ async def test_9_double_booking(session, token, token_2, session_id_1, session_i
     )
     content = extract_content(result)
 
-    # User 2 cố đặt cùng slot
     result = await send_message(
         session, token_2, session_id_2, f"Đặt cho tôi khung giờ #{slot_id}"
     )
     content = extract_content(result)
 
-    # Xác nhận
     result = await send_message(session, token_2, session_id_2, "Xác nhận đặt lịch")
     content = extract_content(result)
 
@@ -573,12 +532,10 @@ async def test_9_double_booking(session, token, token_2, session_id_1, session_i
 
 
 async def test_10_cancel_confirmed_appointment(session, token, session_id):
-    """Test: Hủy appointment đã confirm"""
     print("\n" + "=" * 70)
     print("TEST 10: Hủy appointment đã xác nhận")
     print("=" * 70)
 
-    # Tìm bác sĩ → xem lịch → đặt slot → xác nhận
     result = await send_message(session, token, session_id, "Tìm bác sĩ Hô Hấp")
     content = extract_content(result)
 
@@ -620,7 +577,6 @@ async def test_10_cancel_confirmed_appointment(session, token, session_id):
     if appointment_id_match:
         appt_id = int(appointment_id_match.group(1))
 
-        # Gọi API hủy appointment
         print(f"\n--- Hủy appointment #{appt_id} ---")
         headers = {
             "Authorization": f"Bearer {token}",
@@ -642,7 +598,6 @@ async def test_10_cancel_confirmed_appointment(session, token, session_id):
 
 
 async def test_11_rag_procedure(session, token, session_id):
-    """Test: Hỏi quy trình/thủ tục -> phải gọi search_hospital_knowledge, không bịa"""
     print("\n" + "=" * 70)
     print("TEST 11: RAG - Quy trình tái khám")
     print("=" * 70)
@@ -696,7 +651,6 @@ async def test_13_rag_working_hours(session, token, session_id):
 
 
 async def test_14_rag_no_data_found(session, token, session_id):
-    """Test chống ảo giác RAG: hỏi thứ không có trong tài liệu"""
     print("\n" + "=" * 70)
     print("TEST 14: RAG - Không có dữ liệu, không được bịa")
     print("=" * 70)
@@ -757,7 +711,6 @@ async def test_16_hallucination_fake_doctor(session, token, session_id):
 
 
 async def test_17_fee_floor_too_low(session, token, session_id):
-    """Test: Giá sàn quá thấp -> không có kết quả, không trả bác sĩ giá 0 hoặc sai"""
     print("\n" + "=" * 70)
     print("TEST 17: Fee edge case - Dưới 100k (phải reject đúng)")
     print("=" * 70)
@@ -777,19 +730,16 @@ async def test_17_fee_floor_too_low(session, token, session_id):
 
 
 async def test_18_specialty_switch_mid_conversation(session, token, session_id):
-    """Test: Chuyển chuyên khoa giữa chừng qua session thật (không inject chat_history)"""
     print("\n" + "=" * 70)
     print("TEST 18: Chuyển chuyên khoa giữa chừng (multi-turn session thật)")
     print("=" * 70)
 
-    # Lượt 1
     result = await send_message(session, token, session_id, "Tôi muốn khám mắt")
     content1 = extract_content(result)
     assert_contains(content1, "mắt", "Lượt 1: nhận diện đúng khoa Mắt")
 
     await asyncio.sleep(1)
 
-    # Lượt 2 — chuyển sang Huyết học, agent phải KHÔNG còn nhớ "Mắt"
     result = await send_message(
         session, token, session_id, "Thế còn bên Viện Huyết học thì có bác sĩ nào?"
     )
@@ -808,7 +758,6 @@ async def test_18_specialty_switch_mid_conversation(session, token, session_id):
 
 
 async def reset_test_data(session: aiohttp.ClientSession, token: str):
-    """Reset dữ liệu test — xóa appointments cũ, khôi phục slot"""
     print("\n[0] Reset dữ liệu test...")
 
     headers = {"Authorization": f"Bearer {token}"}
@@ -837,8 +786,6 @@ async def reset_test_data(session: aiohttp.ClientSession, token: str):
         print(f"  ⚠️ Không thể reset: {e}")
 
 
-# ============ MAIN TEST RUNNER ============
-
 
 async def main():
     global PASS_COUNT, FAIL_COUNT
@@ -848,7 +795,6 @@ async def main():
     print("=" * 70)
 
     async with aiohttp.ClientSession() as session:
-        # Setup
         await register_if_needed(session)
         token = await login(session, "test_user", "Test@123456")
 
@@ -856,7 +802,6 @@ async def main():
             print("\n❌ Không lấy được token, dừng test")
             return
 
-        # Đăng ký và login user 2 cho test double-booking
         await register_user_2(session)
         token_2 = await login(session, "test_user_2", "Test@123456")
 
@@ -877,19 +822,16 @@ async def main():
             print("\n❌ Không tạo được session, dừng test")
             return
 
-        # Tạo session riêng cho nhóm RAG
         rag_session_id = await create_chat_session(session, token)
 
         if not rag_session_id:
             print("\n❌ Không tạo được RAG session, dừng test")
             return
 
-        # Chạy tất cả test
         print("\n" + "=" * 70)
         print("CHẠY TẤT CẢ TEST SCENARIOS")
         print("=" * 70)
 
-        # Test cơ bản
         await test_1_basic_search(session, token, session_id)
         await asyncio.sleep(2)
 
@@ -908,21 +850,18 @@ async def main():
         await test_7_not_found_specialty(session, token, session_id)
         await asyncio.sleep(2)
 
-        # Test QUAN TRỌNG NHẤT: Multi-turn booking flow
         await test_6_multi_turn_booking_flow(session, token, session_id)
         await asyncio.sleep(2)
 
         await test_8_decline_booking(session, token, session_id)
         await asyncio.sleep(1)
 
-        # Test double-booking
         await test_9_double_booking(session, token, token_2, session_id, session_id_2)
         await asyncio.sleep(1)
 
         await test_10_cancel_confirmed_appointment(session, token_2, session_id_2)
         await asyncio.sleep(1)
 
-        # Test RAG (session riêng)
         await test_11_rag_procedure(session, token, rag_session_id)
         await asyncio.sleep(1)
 
@@ -935,24 +874,20 @@ async def main():
         await test_14_rag_no_data_found(session, token, rag_session_id)
         await asyncio.sleep(1)
 
-        # Chống ảo giác (chạy trên session chính, history đủ dài)
         await test_15_hallucination_empty_specialty(session, token, session_id)
         await asyncio.sleep(1)
 
         await test_16_hallucination_fake_doctor(session, token, session_id)
         await asyncio.sleep(1)
 
-        # Edge case giá
         await test_17_fee_floor_too_low(session, token, session_id)
         await asyncio.sleep(1)
 
-        # Đa lượt chuyển chuyên khoa — dùng session mới riêng để tránh nhiễu
         switch_session_id = await create_chat_session(session, token)
         await test_18_specialty_switch_mid_conversation(
             session, token, switch_session_id
         )
 
-        # Tổng kết
         print("\n\n" + "=" * 70)
         print("KẾT QUẢ TEST")
         print("=" * 70)

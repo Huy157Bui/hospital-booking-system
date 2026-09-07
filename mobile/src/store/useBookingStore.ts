@@ -1,4 +1,3 @@
-// src/store/useBookingStore.ts
 import { create } from 'zustand';
 
 interface BookingState {
@@ -8,12 +7,12 @@ interface BookingState {
   doctorName: string | null;
   date: string | null; 
   slotId: number | null;
-  slotTime: string | null; // ✅ THÊM DÒNG NÀY
+  slotTime: string | null;
   note: string; 
 
   setSpecialty: (id: number, name: string) => void;
   setDoctor: (id: number, name: string) => void;
-  setSlot: (date: string, slotId: number, slotTime: string) => void; // ✅ SỬA SIGNATURE
+  setSlot: (date: string, slotId: number, slotTime: string) => void;
   setNote: (note: string) => void;
   resetBooking: () => void;
 }
@@ -25,12 +24,12 @@ export const useBookingStore = create<BookingState>((set) => ({
   doctorName: null,
   date: null,
   slotId: null,
-  slotTime: null, // ✅ KHỞI TẠO
+  slotTime: null,
   note: '',
 
   setSpecialty: (id, name) => set({ specialtyId: id, specialtyName: name }),
   setDoctor: (id, name) => set({ doctorId: id, doctorName: name }),
-  setSlot: (date, slotId, slotTime) => set({ date, slotId, slotTime }), // ✅ CẬP NHẬT
+  setSlot: (date, slotId, slotTime) => set({ date, slotId, slotTime }),
   setNote: (note) => set({ note }),
   
   resetBooking: () => set({

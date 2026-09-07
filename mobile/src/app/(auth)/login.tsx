@@ -32,13 +32,10 @@ export default function LoginScreen() {
 
     setIsSubmitting(true);
     try {
-      // 1. Gọi API login
       await login({ username, password });
       
-      // 2. Lấy role mới nhất từ store
       const currentRole = useAuthStore.getState().role;
       
-      // 3. Ép kiểu về String và chuyển sang UPPERCASE để so sánh an toàn, tránh lỗi TS "no overlap"
       if (String(currentRole).toUpperCase() === 'DOCTOR') {
         router.replace('/(doctor)/today');
       } else {

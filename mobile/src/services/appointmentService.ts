@@ -1,4 +1,3 @@
-// src/services/appointmentService.ts
 import apiClient from './apiClient';
 import { Appointment, AppointmentStatus } from '../types/appointment';
 
@@ -33,7 +32,7 @@ export const appointmentService = {
   const response = await apiClient.post(`/appointments/${id}/payment`, {
     appointment_id: id,
     amount: payload.amount,
-    payment_method: payload.payment_method || 'APP_INTERNAL', // Mặc định nếu không truyền
+    payment_method: payload.payment_method || 'APP_INTERNAL',
   });
   return response.data;
   },
@@ -45,14 +44,12 @@ export const appointmentService = {
     return response.data;
   },
 
-  // ✅ THÊM HÀM MỚI: Cập nhật trạng thái lịch hẹn (Dành cho Bác sĩ)
   updateStatus: async (id: number, status: AppointmentStatus): Promise<Appointment> => {
     console.log(`🔄 [API] Cập nhật trạng thái lịch ${id} sang ${status}`);
     const response = await apiClient.patch<Appointment>(`/appointments/${id}/status`, { status });
     return response.data;
   },
 
-    // ✅ THÊM HÀM MỚI: Tạo hồ sơ khám bệnh (Dành cho Bác sĩ)
   createExaminationRecord: async (appointmentId: number, payload: any): Promise<any> => {
     console.log("📤 [API] Gửi dữ liệu hồ sơ khám:", JSON.stringify(payload, null, 2));
     const response = await apiClient.post(`/appointments/${appointmentId}/record`, payload);

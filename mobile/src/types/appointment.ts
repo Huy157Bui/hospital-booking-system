@@ -1,4 +1,3 @@
-// src/types/appointment.ts
 import { Doctor } from './doctor';
 import { Specialty } from './specialty';
 
@@ -13,11 +12,10 @@ export type AppointmentStatus =
 
 export interface ScheduleSlot {
   id: number;
-  start_time: string; // "08:00:00"
-  end_time: string;   // "09:00:00"
+  start_time: string;
+  end_time: string;
   schedule?: {
-    work_date: string; // "2024-10-25"
-    // ✅ THÊM ĐOẠN NÀY ĐỂ KHỚP VỚI ScheduleLiteOut TRONG BACKEND
+    work_date: string;
     doctor?: {
       user?: {
         full_name: string;

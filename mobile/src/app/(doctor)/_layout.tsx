@@ -31,7 +31,6 @@ export default function DoctorLayout() {
           backgroundColor: '#ffffff',
         },
         
-        // Giữ nguyên cấu hình Tab Bar
         tabBarActiveTintColor: '#2f6fed',
         tabBarInactiveTintColor: '#8e8e93',
         tabBarStyle: { 

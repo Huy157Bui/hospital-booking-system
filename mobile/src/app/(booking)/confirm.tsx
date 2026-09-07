@@ -24,7 +24,6 @@ export default function BookingConfirmScreen() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Kiểm tra dữ liệu, nếu thiếu thì quay lại bước trước
   if (!slotId || !date || !doctorName) {
     return (
       <View style={styles.center}>

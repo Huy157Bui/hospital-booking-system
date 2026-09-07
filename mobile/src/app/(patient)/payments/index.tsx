@@ -11,7 +11,6 @@ import { Payment } from '../../../types/appointment';
 export default function PaymentHistoryScreen() {
   const router = useRouter();
 
-  // 1. Lấy dữ liệu lịch sử thanh toán
   const { data: payments, isLoading, isError, refetch, isRefetching } = useQuery<Payment[]>({
     queryKey: ['myPayments'],
     queryFn: async () => {
@@ -19,12 +18,10 @@ export default function PaymentHistoryScreen() {
     },
   });
 
-  // 2. Helper: Format tiền tệ
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
   };
 
-  // 3. Helper: Format ngày giờ
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('vi-VN', {
       day: '2-digit', month: '2-digit', year: 'numeric',
@@ -32,7 +29,6 @@ export default function PaymentHistoryScreen() {
     });
   };
 
-  // 4. Helper: Cấu hình màu sắc theo trạng thái
   const getStatusConfig = (status: string) => {
     switch (status?.toUpperCase()) {
       case 'PAID': return { label: 'Thành công', color: '#10b981', bg: '#d1fae5', icon: 'checkmark-circle' };
@@ -42,7 +38,6 @@ export default function PaymentHistoryScreen() {
     }
   };
 
-  // 5. Render từng item giao dịch
   const renderPaymentItem = ({ item }: { item: Payment }) => {
     const statusConfig = getStatusConfig(item.status);
     const summary = item.appointment_summary;
@@ -92,7 +87,6 @@ export default function PaymentHistoryScreen() {
     );
   };
 
-  // 6. Render trạng thái Loading / Error
   if (isLoading) {
     return (
       <SafeAreaView style={styles.center} edges={['top', 'bottom']}>
@@ -114,7 +108,6 @@ export default function PaymentHistoryScreen() {
     );
   }
 
-  // 7. Render giao diện chính
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <FlatList

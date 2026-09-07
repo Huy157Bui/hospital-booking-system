@@ -1,13 +1,11 @@
-// src/components/appointments/AppointmentCard.tsx
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Appointment } from '../../types/appointment';
 
-// 1. Sửa interface (thay onCancel thành onAction cho linh hoạt)
 interface Props {
   appointment: Appointment;
   variant: 'patient' | 'doctor';
   onPress?: () => void;
-  onAction?: () => void; // ✅ Đổi tên để dùng chung cho cả Hủy (Patient) và Cập nhật (Doctor)
+  onAction?: () => void; 
 }
 
 export function AppointmentCard({ appointment, variant, onPress, onAction }: Props) {
@@ -38,7 +36,6 @@ export function AppointmentCard({ appointment, variant, onPress, onAction }: Pro
     }
   };
 
-  // ✅ ĐÃ SỬA: Lấy dữ liệu an toàn, khớp với cấu trúc nested của Backend
   const displayName = variant === 'patient' 
     ? (appointment.slot?.schedule?.doctor?.user?.full_name || 'Đang cập nhật')
     : (appointment.patient?.user?.full_name || appointment.patient_name || 'Bệnh nhân');
@@ -48,7 +45,6 @@ export function AppointmentCard({ appointment, variant, onPress, onAction }: Pro
   const rawDate = appointment.slot?.schedule?.work_date || new Date().toISOString().split('T')[0];
   const rawTime = appointment.slot?.start_time || '08:00:00';
 
-  // Đảm bảo định dạng chuẩn ISO: YYYY-MM-DDTHH:mm:ss
   const isoString = `${rawDate}T${rawTime}`;
   const dateObj = new Date(isoString);
   const isValidDate = !isNaN(dateObj.getTime());
@@ -58,7 +54,7 @@ export function AppointmentCard({ appointment, variant, onPress, onAction }: Pro
     : 'Ngày chưa xác định';
 
   const displayTime = isValidDate && rawTime 
-    ? rawTime.substring(0, 5) // Cắt "09:00:00" thành "09:00"
+    ? rawTime.substring(0, 5) 
     : 'Giờ chưa xác định';
 
   const canCancel = variant === 'patient' && (appointment.status === 'PENDING' || appointment.status === 'CONFIRMED');

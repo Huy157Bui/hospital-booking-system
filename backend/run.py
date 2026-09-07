@@ -6,11 +6,9 @@ import time
 def main():
     backend_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # 1. Seed
     print("\n🔥 BƯỚC 1: SEED DỮ LIỆU")
     subprocess.run([sys.executable, "app/seed.py"], cwd=backend_dir)
 
-    # 2. Uvicorn
     print("\n🔥 BƯỚC 2: KHỞI ĐỘNG UVICORN")
     uvicorn_process = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "main:app", "--port", "8000"],
@@ -19,11 +17,9 @@ def main():
     print("⏳ Đang chờ server khởi động...")
     time.sleep(5)
 
-    # 3. Test
     print("\n🔥 BƯỚC 3: CHẠY TEST")
     subprocess.run([sys.executable, "app/test_chat_agent_integration.py"], cwd=backend_dir)
 
-    # 4. Tắt uvicorn
     print("\n🛑 Đang dừng uvicorn...")
     uvicorn_process.terminate()
     try:

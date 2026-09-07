@@ -1,4 +1,3 @@
-// src/types/api.ts
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -6,5 +5,4 @@ export interface ApiResponse<T = any> {
   error?: string;
 }
 
-// Helper type để lấy kiểu dữ liệu bên trong ApiResponse
 export type ExtractResponseData<T> = T extends ApiResponse<infer U> ? U : never;

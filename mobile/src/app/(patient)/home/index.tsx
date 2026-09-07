@@ -1,4 +1,3 @@
-// src/app/(patient)/home/index.tsx
 import React from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
@@ -15,8 +14,6 @@ import { useBookingStore } from '../../../store/useBookingStore';
 export default function PatientHomeScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
-  
-  // Sử dụng hook React Query đã tạo, không cần useState/useEffect thủ công
   const { data: specialties, isLoading, isError, refetch } = useSpecialties();
 
   return (
@@ -88,7 +85,6 @@ export default function PatientHomeScreen() {
                 <TouchableOpacity 
                   style={styles.specialtyCard}
                   onPress={() => {
-                    //console.log("🟢 [DEBUG] Đang chọn chuyên khoa:", item.id, item.name);
                     useBookingStore.getState().setSpecialty(item.id, item.name);
                     router.push('/(booking)/doctor');
                   }}

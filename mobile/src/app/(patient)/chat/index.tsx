@@ -1,10 +1,9 @@
-// src/app/(patient)/chat/index.tsx
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity, 
-  ActivityIndicator, Alert // ✅ Chỉ giữ lại các component cơ bản
+  ActivityIndicator, Alert
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; // ✅ Import đúng thư viện có prop 'edges'
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { chatService } from '../../../services/chatService'; 
@@ -80,7 +79,6 @@ export default function PatientChatListScreen() {
       </View>
 
       {error ? (
-        // ✅ GIAO DIỆN KHI CÓ LỖI MẠNG, CÓ NÚT THỬ LẠI
         <View style={styles.center}>
           <Ionicons name="wifi-outline" size={48} color="#9ca3af" />
           <Text style={styles.errorText}>{error}</Text>
@@ -119,7 +117,6 @@ export default function PatientChatListScreen() {
             </TouchableOpacity>
           )}
           contentContainerStyle={styles.listContent}
-          // Cho phép kéo xuống để tải lại (Pull to refresh)
           onRefresh={loadSessions}
           refreshing={loading}
         />

@@ -1,4 +1,3 @@
-// src/app/(patient)/chat/[sessionId].tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, TouchableOpacity, 
@@ -146,8 +145,6 @@ export default function ChatDetailScreen() {
   };
 
   return (
-    // ✅ SỬA LỖI KHOẢNG TRẮNG: Chỉ dùng edges={['top']} để tránh camera.
-    // Phần dưới sẽ tự động ôm sát vào thanh Tab Navigator mà không bị chừa 2 lần.
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <KeyboardAvoidingView 
         style={styles.container} 
@@ -229,7 +226,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16, 
     paddingVertical: 12, 
-    paddingTop: 8, // Giảm paddingTop vì SafeAreaView đã lo phần trên rồi
+    paddingTop: 8,
     backgroundColor: '#fff',
     borderBottomWidth: 1, 
     borderBottomColor: '#eee',
@@ -275,7 +272,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     alignItems: 'flex-end', 
     padding: 12, 
-    paddingBottom: 12, // ✅ Đảm bảo khung nhập liệu cách đều mép dưới (nơi thanh Tab bắt đầu)
+    paddingBottom: 12,
     backgroundColor: '#fff',
     borderTopWidth: 1, 
     borderTopColor: '#eee',

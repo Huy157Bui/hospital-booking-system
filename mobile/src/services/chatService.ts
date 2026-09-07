@@ -1,4 +1,3 @@
-// src/services/chatService.ts
 import apiClient from './apiClient';
 import { ChatSession, ChatMessage } from '../types/chat';
 

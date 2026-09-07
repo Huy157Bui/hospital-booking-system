@@ -501,7 +501,6 @@ async def seed():
                 chosen_slot.status = ScheduleSlotStatus.BOOKED
         await db.flush()
 
-        # Tạo examination, prescription và cập nhật medical record
         symptoms = [
             "Đau đầu, mệt mỏi",
             "Sốt cao, ho",
@@ -556,7 +555,6 @@ async def seed():
                 db.add(exam)
                 await db.flush()
 
-                # CẬP NHẬT MEDICAL RECORD với kết quả khám
                 med_record.medical_history = (
                     f"{med_record.medical_history or 'Khỏe mạnh'}; "
                     f"Khám {work_date}: {diagnosis}"
@@ -567,7 +565,6 @@ async def seed():
                 )
                 med_record.updated_date = datetime.now(UTC)
 
-                # Tạo prescription
                 pres = Prescription(
                     examination_id=exam.id,
                     prescription_type=1,
@@ -578,7 +575,6 @@ async def seed():
                 db.add(pres)
                 await db.flush()
 
-                # Tạo prescription details
                 medicines = await db.execute(select(Medicine).limit(6))
                 medicine_list = medicines.scalars().all()
                 if medicine_list:
@@ -602,7 +598,6 @@ async def seed():
                         )
                         db.add(pd)
 
-                # Tạo payment
                 payment = Payment(
                     appointment_id=appt.id,
                     amount=Decimal(random.randint(200000, 500000)),
@@ -713,7 +708,6 @@ async def seed():
                         db.add(exam)
                         await db.flush()
 
-                        # CẬP NHẬT MEDICAL RECORD
                         med_record.medical_history = (
                             f"{med_record.medical_history or 'Khỏe mạnh'}; "
                             f"Khám {today}: Viêm họng cấp"
@@ -724,7 +718,6 @@ async def seed():
                         )
                         med_record.updated_date = datetime.now(UTC)
 
-                        # Tạo prescription
                         pres = Prescription(
                             examination_id=exam.id,
                             prescription_type=1,
@@ -735,7 +728,6 @@ async def seed():
                         db.add(pres)
                         await db.flush()
 
-                        # Tạo prescription details
                         medicines = await db.execute(select(Medicine).limit(3))
                         medicine_list = medicines.scalars().all()
                         if medicine_list:
@@ -754,7 +746,6 @@ async def seed():
                             )
                             db.add(pd)
 
-                        # Tạo payment
                         payment = Payment(
                             appointment_id=appt.id,
                             amount=Decimal(300000),

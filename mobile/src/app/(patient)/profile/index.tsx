@@ -1,7 +1,6 @@
-// src/app/(patient)/profile/index.tsx
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; // ✅ SỬA: Dùng thư viện chuẩn của Expo
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../../store/useAuthStore';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,7 +27,6 @@ export default function PatientProfileScreen() {
   };
 
   return (
-    // ✅ edges={['top', 'bottom']} đảm bảo chừa chỗ cho camera và thanh home
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>

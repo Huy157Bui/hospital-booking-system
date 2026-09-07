@@ -1,4 +1,3 @@
-// src/app/(patient)/appointments/index.tsx
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';

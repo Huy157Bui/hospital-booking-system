@@ -100,10 +100,9 @@ class Patient(Base):
     occupation = Column(String(100), nullable=True)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
-    # 1-1
+
     user = relationship("User", back_populates="patient", uselist=False)
-    # có khóa ngoại mặc định là false
-    # 1-n
+
     appointments = relationship("Appointment", back_populates="patient", uselist=True)
     medical_record = relationship(
         "MedicalRecord", back_populates="patient", uselist=False
@@ -125,11 +124,11 @@ class Doctor(Base):
     status = Column(String(50), nullable=False, default="active")
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
-    # 1-1
+
     user = relationship("User", back_populates="doctor", uselist=False)
-    # n-1
+
     specialty = relationship("Specialty", back_populates="doctors", uselist=False)
-    # 1-n
+
     schedules = relationship("Schedule", back_populates="doctor", uselist=True)
     examinations = relationship("Examination", back_populates="doctor", uselist=True)
 
@@ -147,7 +146,7 @@ class Specialty(Base):
     status = Column(Enum(SpecialtyStatus), nullable=False, default=SpecialtyStatus.ACTIVE)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
-    # 1-n
+
     doctors = relationship("Doctor", back_populates="specialty", uselist=True)
 
 
@@ -160,7 +159,7 @@ class Schedule(Base):
     status = Column(Enum(ScheduleStatus), nullable=False, default=ScheduleStatus.OPEN)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
-    # n-1
+
     doctor = relationship("Doctor", back_populates="schedules", uselist=False)
 
     slots = relationship("ScheduleSlot", back_populates="schedule")
@@ -196,10 +195,8 @@ class Appointment(Base):
         Enum(AppointmentStatus), nullable=False, default=AppointmentStatus.PENDING
     )
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
-    # n-1
     patient = relationship("Patient", back_populates="appointments", uselist=False)
     slot = relationship("ScheduleSlot", back_populates="appointment", uselist=False)
-    # 1-1
     examination = relationship(
         "Examination", back_populates="appointment", uselist=False
     )
@@ -218,9 +215,9 @@ class MedicalRecord(Base):
     note = Column(String(500), nullable=True)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
-    # 1-1
+
     patient = relationship("Patient", back_populates="medical_record", uselist=False)
-    # 1-n
+
     examinations = relationship(
         "Examination", back_populates="medical_record", uselist=True
     )
@@ -243,27 +240,25 @@ class Examination(Base):
     conclusion = Column(String(500), nullable=True)
     disease_name = Column(String(200), nullable=True)
     height = Column(Float, nullable=True)
-    weight = Column(Float, nullable=True) #tạo bảng chứa: giá trị và value
+    weight = Column(Float, nullable=True)
     blood_pressure = Column(String(20), nullable=True)
     heart_rate = Column(Integer, nullable=True)
     temperature = Column(Float, nullable=True)
     note = Column(String(500), nullable=True)
-    examined_at = Column(DateTime, nullable=True) # dia diem
+    examined_at = Column(DateTime, nullable=True)
     status = Column(String(20), nullable=False, default="in_progress")
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
 
-    # 1-1
     appointment = relationship(
         "Appointment", back_populates="examination", uselist=False
     )
-    # n-1
     medical_record = relationship(
         "MedicalRecord", back_populates="examinations", uselist=False
     )
     patient = relationship("Patient", back_populates="examinations", uselist=False)
     doctor = relationship("Doctor", back_populates="examinations", uselist=False)
-    # 1-n
+
     prescriptions = relationship(
         "Prescription", back_populates="examination", uselist=True
     )
@@ -280,11 +275,11 @@ class Prescription(Base):
     status = Column(SmallInteger, nullable=False, default=0)
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
-    # n-1
+
     examination = relationship(
         "Examination", back_populates="prescriptions", uselist=False
     )
-    # 1-n
+
     prescription_details = relationship(
         "PrescriptionDetail", back_populates="prescription", uselist=True
     )
@@ -305,7 +300,7 @@ class Medicine(Base):
     status = Column(String(50), nullable=False, default="active")
     created_date = Column(DateTime, server_default=func.now(), nullable=False)
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
-    # 1-n
+
     prescription_details = relationship(
         "PrescriptionDetail", back_populates="medicine", uselist=True
     )
@@ -325,7 +320,7 @@ class PrescriptionDetail(Base):
     days = Column(Integer, nullable=True)
     instruction = Column(String(500), nullable=True)
     subtotal = Column(Numeric(12, 2), nullable=False)
-    # n-1
+
     prescription = relationship(
         "Prescription", back_populates="prescription_details", uselist=False
     )

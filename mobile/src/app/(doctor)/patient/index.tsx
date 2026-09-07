@@ -21,7 +21,6 @@ export default function DoctorPatientsScreen() {
     },
   });
 
-  // Lọc bệnh nhân theo tên hoặc SĐT ngay trên frontend
   const filteredPatients = patients?.filter((p) => 
     p.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (p.phone && p.phone.includes(searchQuery))

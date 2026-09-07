@@ -32,13 +32,11 @@ export default function DoctorExaminationScreen() {
   const [patientHistory, setPatientHistory] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-  // --- STATE MỚI CHO VIỆC CHỌN THUỐC ---
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false);
-  const [showMedicineSelector, setShowMedicineSelector] = useState(false); // Modal chọn thuốc
+  const [showMedicineSelector, setShowMedicineSelector] = useState(false);
   const [medicinesList, setMedicinesList] = useState<any[]>([]);
   const [isLoadingMedicines, setIsLoadingMedicines] = useState(false);
   const [searchMedicine, setSearchMedicine] = useState('');
-  // --------------------------------------
 
   const [editingPrescriptionIndex, setEditingPrescriptionIndex] = useState<number | null>(null);
   const [prescriptionForm, setPrescriptionForm] = useState({
@@ -96,12 +94,10 @@ export default function DoctorExaminationScreen() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // ✅ HÀM MỚI: Tải danh sách thuốc khi mở modal
   const loadMedicines = async () => {
-    if (medicinesList.length > 0) return; // Đã tải thì không tải lại
+    if (medicinesList.length > 0) return;
     setIsLoadingMedicines(true);
     try {
-      // Giả sử backend có endpoint GET /medicines
       const response = await apiClient.get('/medicines');
       setMedicinesList(response.data || []);
     } catch (error) {
@@ -116,7 +112,7 @@ export default function DoctorExaminationScreen() {
     setEditingPrescriptionIndex(null);
     setPrescriptionForm({ medicine_id: '', medicine_name: '', dosage: '', quantity: '', instruction: '' });
     setShowPrescriptionModal(true);
-    loadMedicines(); // Tải danh sách thuốc
+    loadMedicines(); 
   };
 
   const handleEditPrescription = (index: number) => {
@@ -127,7 +123,7 @@ export default function DoctorExaminationScreen() {
       setEditingPrescriptionIndex(index);
       setPrescriptionForm({
         medicine_id: firstItem?.medicine_id?.toString() || '',
-        medicine_name: firstItem?.medicine_name || 'Thuốc đã chọn', // Nếu backend trả về name
+        medicine_name: firstItem?.medicine_name || 'Thuốc đã chọn',
         dosage: firstItem?.dosage || '',
         quantity: firstItem?.quantity?.toString() || '',
         instruction: firstItem?.instruction || '',
@@ -137,7 +133,6 @@ export default function DoctorExaminationScreen() {
     }
   };
 
-  // ✅ HÀM MỚI: Xử lý khi chọn thuốc từ danh sách
   const handleSelectMedicine = (medicine: any) => {
     setPrescriptionForm(prev => ({
       ...prev,
@@ -145,7 +140,7 @@ export default function DoctorExaminationScreen() {
       medicine_name: medicine.name || medicine.medicine_name || `Thuốc #${medicine.id}`,
     }));
     setShowMedicineSelector(false);
-    setSearchMedicine(''); // Reset search
+    setSearchMedicine('');
   };
 
   const handleSavePrescription = () => {
@@ -316,7 +311,6 @@ export default function DoctorExaminationScreen() {
 
   const patientName = appointment?.patient?.user?.full_name || appointment?.patient_name || 'Bệnh nhân';
 
-  // Lọc danh sách thuốc theo từ khóa tìm kiếm
   const filteredMedicines = medicinesList.filter((med) => 
     (med.name || med.medicine_name || '').toLowerCase().includes(searchMedicine.toLowerCase()) ||
     med.id.toString().includes(searchMedicine)
@@ -426,7 +420,6 @@ export default function DoctorExaminationScreen() {
           ) : (
             formData.prescriptions.map((prescription: any, index: number) => {
               const item = prescription.items?.[0];
-              // Tìm tên thuốc từ danh sách để hiển thị cho đẹp (nếu backend không trả về name)
               const medName = medicinesList.find(m => m.id === item?.medicine_id)?.name || medicinesList.find(m => m.id === item?.medicine_id)?.medicine_name || `Mã #${item?.medicine_id}`;
               
               return (
@@ -652,9 +645,7 @@ export default function DoctorExaminationScreen() {
   );
 }
 
-// ... (Giữ nguyên phần styles cũ của bạn, chỉ cần THÊM 2 style mới ở dưới cùng)
 const styles = StyleSheet.create({
-  // ... (toàn bộ style cũ của bạn giữ nguyên) ...
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   errorText: { fontSize: 18, fontWeight: 'bold', color: '#dc2626', marginBottom: 8, textAlign: 'center' },
@@ -706,7 +697,6 @@ const styles = StyleSheet.create({
   savePrescriptionBtn: { backgroundColor: '#2f6fed', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 16 },
   savePrescriptionText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   
-  // ✅ STYLE MỚI CHO MODAL CHỌN THUỐC
   medicineItem: {
     paddingVertical: 12,
     paddingHorizontal: 16,

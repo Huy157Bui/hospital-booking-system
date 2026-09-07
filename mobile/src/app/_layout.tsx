@@ -1,4 +1,3 @@
-// src/app/_layout.tsx
 import { Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -20,7 +19,6 @@ const queryClient = new QueryClient({
 export default function RootLayout() {
   const { checkAutoLogin, isLoading } = useAuthStore();
 
-  // Chỉ gọi checkAutoLogin 1 lần duy nhất khi app mount
   useEffect(() => {
     checkAutoLogin();
   }, []);

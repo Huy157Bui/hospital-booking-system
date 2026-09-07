@@ -1,5 +1,3 @@
-// src/types/specialty.ts
-
 export type SpecialtyStatus = 'ACTIVE' | 'INACTIVE';
 
 export interface Specialty {
@@ -8,5 +6,5 @@ export interface Specialty {
   description?: string;
   image_url?: string;
   location?: string;
-  status?: SpecialtyStatus; // Thêm field này để khớp backend
+  status?: SpecialtyStatus;
 }

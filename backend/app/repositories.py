@@ -289,7 +289,6 @@ class SpecialtyRepository(BaseRepository[Specialty]):
         )
         return result.scalar_one_or_none()
 
-    # che
     async def toggle_status(self, specialty: Specialty) -> Specialty:
         if specialty.status == SpecialtyStatus.ACTIVE:
             specialty.status = SpecialtyStatus.INACTIVE
@@ -707,7 +706,7 @@ class ExaminationRepository(BaseRepository[Examination]):
                 func.count(Examination.id).label("total_visits"),
                 func.max(Examination.created_date).label("last_visit_date"),
             )
-            .join(User, Patient.id == User.id)  # Shared PK: Patient.id == User.id
+            .join(User, Patient.id == User.id)
             .join(Examination, Patient.id == Examination.patient_id)
             .where(Examination.doctor_id == doctor_id)
             .group_by(
@@ -721,7 +720,6 @@ class ExaminationRepository(BaseRepository[Examination]):
         )
 
         result = await self.db.execute(stmt)
-        # Trả về list of dict để Pydantic dễ dàng validate
         return [dict(row._mapping) for row in result.all()]
 
     async def get_by_appointment(self, appointment_id: int) -> Examination | None:

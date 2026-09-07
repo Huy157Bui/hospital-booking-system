@@ -1,4 +1,3 @@
-// src/hooks/useDoctors.ts
 import { useQuery } from '@tanstack/react-query';
 import { doctorService } from '../services/doctorService';
 import { Doctor } from '../types/doctor';
@@ -11,6 +10,6 @@ export const useDoctorsBySpecialty = (specialtyId: number | null) => {
       const response: any = await doctorService.getBySpecialty(specialtyId);
       return Array.isArray(response) ? response : response?.data || [];
     },
-    enabled: !!specialtyId, // Chỉ gọi API khi đã có specialtyId
+    enabled: !!specialtyId,
   });
 };
