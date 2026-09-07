@@ -93,7 +93,7 @@ export default function DoctorTodayScreen() {
               }
             }}
           >
-            <Text style={styles.startBtnText}>🩺 Bắt đầu khám</Text>
+            <Text style={styles.startBtnText}>Bắt đầu khám</Text>
           </TouchableOpacity>
         );
       
@@ -104,7 +104,7 @@ export default function DoctorTodayScreen() {
             style={[styles.actionBtn, styles.recordBtn]}
             onPress={() => router.push(`/(doctor)/appointments/${appointment.id}`)}
           >
-            <Text style={styles.recordBtnText}>📝 Ghi hồ sơ & Hoàn thành</Text>
+            <Text style={styles.recordBtnText}>Ghi hồ sơ</Text>
           </TouchableOpacity>
         );
       
@@ -112,14 +112,14 @@ export default function DoctorTodayScreen() {
       case 'PAID':
         return (
           <View style={styles.completedBadge}>
-            <Text style={styles.completedText}>✅ Đã hoàn thành</Text>
+            <Text style={styles.completedText}>Đã hoàn thành</Text>
           </View>
         );
 
       case 'CANCELLED':
         return (
           <View style={styles.cancelledBadge}>
-            <Text style={styles.cancelledText}>❌ Đã hủy</Text>
+            <Text style={styles.cancelledText}>Đã hủy</Text>
           </View>
         );
       

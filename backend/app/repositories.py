@@ -5,6 +5,7 @@ from app.schemas import PaymentOut, ScheduleOut
 logger = logging.getLogger(__name__)
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Generic, TypeVar, cast
 
 from sqlalchemy import exists, func, select, distinct, Date
@@ -34,6 +35,7 @@ from app.models import (
     ChatSession,
     ChatMessage,
     RefreshToken,
+    UserRole,
 )
 
 ModelType = TypeVar("ModelType", bound=Base)
@@ -101,6 +103,17 @@ class UserRepository(BaseRepository[User]):
         )
         return list(result.scalars().all())
 
+    async def get_all_users(
+        self, *, skip: int = 0, limit: int = 100, role: UserRole | None = None, is_active: bool | None = None
+    ) -> list[User]:
+        stmt = select(User).offset(skip).limit(limit).order_by(User.created_date.desc())
+        if role:
+            stmt = stmt.where(User.role == role)
+        if is_active is not None:
+            stmt = stmt.where(User.is_active == is_active)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
 
 class PatientRepository(BaseRepository[Patient]):
     def __init__(self, db: AsyncSession) -> None:
@@ -122,6 +135,16 @@ class PatientRepository(BaseRepository[Patient]):
         )
         return result.scalar_one_or_none()
 
+    async def get_all_patients(self, *, skip: int = 0, limit: int = 100) -> list[Patient]:
+        stmt = (
+            select(Patient)
+            .options(selectinload(Patient.user))
+            .offset(skip)
+            .limit(limit)
+            .order_by(Patient.created_date.desc())
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().unique().all())
 
 class DoctorRepository(BaseRepository[Doctor]):
     def __init__(self, db: AsyncSession) -> None:
@@ -264,6 +287,53 @@ class DoctorRepository(BaseRepository[Doctor]):
 
         return doctors
 
+    async def get_all_doctors(
+        self, *, skip: int = 0, limit: int = 100, status: str | None = None
+    ) -> list[Doctor]:
+        stmt = (
+            select(Doctor)
+            .options(selectinload(Doctor.user), selectinload(Doctor.specialty))
+            .offset(skip)
+            .limit(limit)
+            .order_by(Doctor.created_date.desc())
+        )
+        if status:
+            stmt = stmt.where(Doctor.status == status)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().unique().all())
+
+    async def get_doctors_by_specialty(
+        self,
+        specialty_id: int,
+        *,
+        skip: int = 0,
+        limit: int = 100,
+        status: str = "active",
+    ) -> list[Doctor]:
+        stmt = (
+            select(Doctor)
+            .where(Doctor.specialty_id == specialty_id)
+            .offset(skip)
+            .limit(limit)
+            .options(selectinload(Doctor.user), selectinload(Doctor.specialty))
+            .order_by(
+                Doctor.rate.desc(), Doctor.experience_year.desc()
+            )
+        )
+        if status:
+            stmt = stmt.where(Doctor.status == status)
+
+        result = await self.db.execute(stmt)
+        return list(result.scalars().unique().all())
+
+    async def count_doctors_by_specialty(
+        self, specialty_id: int, status: str = "active"
+    ) -> int:
+        stmt = select(Doctor.id).where(Doctor.specialty_id == specialty_id)
+        if status:
+            stmt = stmt.where(Doctor.status == status)
+        result = await self.db.execute(stmt)
+        return len(result.scalars().all())
 
 class SpecialtyRepository(BaseRepository[Specialty]):
     def __init__(self, db: AsyncSession) -> None:
@@ -617,7 +687,7 @@ class AppointmentRepository(BaseRepository[Appointment]):
         return result.scalar_one()
 
     async def update_status(
-            self, appointment: Appointment, new_status: AppointmentStatus
+        self, appointment: Appointment, new_status: AppointmentStatus
     ) -> Appointment:
         appointment.status = new_status
         await self.db.flush()
@@ -639,6 +709,53 @@ class AppointmentRepository(BaseRepository[Appointment]):
         result = await self.db.execute(stmt)
         return result.scalar_one()
 
+    async def get_all_appointments(
+        self, *, skip: int = 0, limit: int = 100, status: AppointmentStatus | None = None, doctor_id: int | None = None
+    ) -> list[Appointment]:
+        stmt = (
+            select(Appointment)
+            .options(
+                selectinload(Appointment.patient).selectinload(Patient.user),
+                selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.user),
+            )
+            .offset(skip)
+            .limit(limit)
+            .order_by(Appointment.created_date.desc())
+        )
+        if status:
+            stmt = stmt.where(Appointment.status == status)
+        if doctor_id:
+            stmt = (
+                stmt.join(ScheduleSlot)
+                .join(Schedule)
+                .where(Schedule.doctor_id == doctor_id)
+            )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().unique().all())
+
+    async def get_appointment_detail(self, appointment_id: int) -> Appointment | None:
+        stmt = (
+            select(Appointment)
+            .where(Appointment.id == appointment_id)
+            .options(
+                selectinload(Appointment.patient).selectinload(Patient.user),
+                selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.user),
+                selectinload(Appointment.slot)
+                .selectinload(ScheduleSlot.schedule)
+                .selectinload(Schedule.doctor)
+                .selectinload(Doctor.specialty),
+                selectinload(Appointment.examination),
+                selectinload(Appointment.payment),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
 
 class MedicalRecordRepository(BaseRepository[MedicalRecord]):
     def __init__(self, db: AsyncSession) -> None:
@@ -665,6 +782,15 @@ class MedicalRecordRepository(BaseRepository[MedicalRecord]):
         result = await self.db.execute(stmt)
         return result.scalar_one()
 
+    async def get_all_medicines(self, *, skip: int = 0, limit: int = 100) -> list[Medicine]:
+        stmt = select(Medicine).offset(skip).limit(limit).order_by(Medicine.created_date.desc())
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_by_code_exclude_id(self, code: str, exclude_id: int) -> Medicine | None:
+        stmt = select(Medicine).where(Medicine.code == code, Medicine.id != exclude_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
 
 class ExaminationRepository(BaseRepository[Examination]):
     def __init__(self, db: AsyncSession) -> None:
@@ -1038,7 +1164,32 @@ class ReportRepository(BaseRepository[Appointment]):
         return {
             "total": total,
             "status_counts": status_counts,
-            "daily_rows": daily_rows
+            "daily_rows": daily_rows,
+        }
+    async def get_dashboard_summary(self, today: date) -> dict:
+        total_users = await self.db.scalar(select(func.count()).select_from(User)) or 0
+        total_doctors = await self.db.scalar(select(func.count()).select_from(Doctor)) or 0
+        total_patients = await self.db.scalar(select(func.count()).select_from(Patient)) or 0
+
+        total_appt_today = await self.db.scalar(
+            select(func.count()).select_from(Appointment).where(
+                func.date(Appointment.created_date) == today
+            )
+        ) or 0
+
+        revenue_today = await self.db.scalar(
+            select(func.sum(Payment.amount)).where(
+                Payment.status == PaymentStatus.SUCCESS,
+                func.date(Payment.created_date) == today
+            )
+        ) or Decimal(0)
+
+        return {
+            "total_users": total_users,
+            "total_doctors": total_doctors,
+            "total_patients": total_patients,
+            "total_appointments_today": total_appt_today,
+            "revenue_today": Decimal(revenue_today),
         }
 
 class ChatSessionRepository(BaseRepository[ChatSession]):

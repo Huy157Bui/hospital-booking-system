@@ -387,7 +387,7 @@ export default function DoctorExaminationScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📋 Lâm sàng & Chẩn đoán</Text>
+          <Text style={styles.sectionTitle}>Chẩn đoán</Text>
           <Text style={styles.label}>Triệu chứng chính</Text>
           <TextInput style={[styles.input, styles.textArea, isViewOnly && styles.inputDisabled]} multiline numberOfLines={3} placeholder="Bệnh nhân than phiền..." value={formData.symptom} onChangeText={(val) => updateField('symptom', val)} editable={!isViewOnly} />
           <Text style={styles.label}>Tên bệnh / Chẩn đoán</Text>
@@ -397,7 +397,7 @@ export default function DoctorExaminationScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📝 Ghi chú nội bộ</Text>
+          <Text style={styles.sectionTitle}>📝 Ghi chú</Text>
           <TextInput style={[styles.input, styles.textArea, isViewOnly && styles.inputDisabled]} multiline numberOfLines={3} placeholder="Ghi chú dành cho bác sĩ..." value={formData.note} onChangeText={(val) => updateField('note', val)} editable={!isViewOnly} />
         </View>
 
@@ -463,7 +463,7 @@ export default function DoctorExaminationScreen() {
               onPress={handleSaveRecord} 
               disabled={isSubmitting}
             >
-              {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>💾 Lưu hồ sơ</Text>}
+              {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Lưu hồ sơ</Text>}
             </TouchableOpacity>
           )}
         </View>

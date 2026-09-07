@@ -1,5 +1,5 @@
 from datetime import date
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.dependencies.commons import (
     get_current_user,
@@ -57,6 +57,7 @@ from app.schemas import (
     DoctorAvailabilityOut,
     PatientSummaryOut,
     MedicineOut,
+    AppointmentDetailOut,
 )
 
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -186,6 +187,16 @@ async def get_appointment_detail(
         appointment_id, current_user
     )
 
+@appointments_router.get("/{appointment_id}/detail", response_model=AppointmentDetailOut)
+async def get_appointment_detail_info(
+    appointment_id: int,
+    appointment_service: AppointmentServiceDep,
+    current_user: User = Depends(get_current_user),
+
+):
+    return await appointment_service.get_appointment_detail(
+        appointment_id=appointment_id, current_user=current_user
+    )
 
 @appointments_router.patch("/{appointment_id}/cancel", response_model=AppointmentOut)
 async def cancel_appointment(
@@ -259,6 +270,17 @@ async def get_specialties(specialty_service: SpecialtyServiceDep):
 async def get_specialty(specialty_id: int, specialty_service: SpecialtyServiceDep):
     return await specialty_service.get_specialty(specialty_id)
 
+@specialties_router.get("/{specialty_id}/doctors", response_model=list[DoctorOut])
+async def get_doctors_by_specialty(
+    specialty_id: int,
+    doctor_service: DoctorServiceDep,
+    skip: int = Query(0, ge=0, description="Số lượng bản ghi bỏ qua"),
+    limit: int = Query(20, ge=1, le=100, description="Số lượng bản ghi tối đa"),
+
+):
+    return await doctor_service.get_doctors_by_specialty(
+        specialty_id=specialty_id, skip=skip, limit=limit
+    )
 
 doctors_router = APIRouter(prefix="/doctors", tags=["Doctors"])
 

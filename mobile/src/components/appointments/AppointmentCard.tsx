@@ -73,7 +73,7 @@ export function AppointmentCard({ appointment, variant, onPress, onAction }: Pro
       </View>
 
       <Text style={styles.datetime}>
-        📅 {displayDate} • 🕒 {displayTime}
+        {displayDate} - {displayTime}
       </Text>
 
       {variant === 'patient' && onAction && (appointment.status === 'PENDING' || appointment.status === 'CONFIRMED') && (

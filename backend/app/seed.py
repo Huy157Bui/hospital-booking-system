@@ -27,7 +27,7 @@ for logger_name in ("sqlalchemy", "sqlalchemy.engine"):
 warnings.filterwarnings("ignore", message=".*error reading bcrypt version.*")
 
 from sqlalchemy import delete, select, text
-from app.database import AsyncSessionLocal, engine
+from app.database import AsyncSessionLocal, sync_engine
 from app.models import (
     Appointment,
     AppointmentStatus,
@@ -855,7 +855,7 @@ async def seed():
 
         await db.commit()
         await db.close()
-        await engine.dispose()
+        sync_engine.dispose()
         print(f"🎉 HOÀN THÀNH SEED! Đã tạo lịch hôm nay cho {len(guaranteed_doctors)} bác sĩ.")
 
 

@@ -1,16 +1,9 @@
 import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-
-
 from contextlib import asynccontextmanager
 from starlette.requests import Request
-
 from fastapi import FastAPI
 from starlette.responses import JSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.admin import admin_router, reports_router
 from app.routers import (
@@ -25,6 +18,13 @@ from app.routers import (
     medicines_router,
 )
 from app.exceptions import AppException
+from app.core import settings
+from app.admin_ui import setup_admin
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 
 
 @asynccontextmanager
@@ -33,6 +33,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SECRET_KEY,
+    https_only=False,
+)
 
 
 @app.exception_handler(AppException)
@@ -53,3 +59,5 @@ app.include_router(payments_router)
 app.include_router(chat_router)
 app.include_router(reports_router)
 app.include_router(medicines_router)
+
+setup_admin(app)

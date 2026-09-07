@@ -738,7 +738,18 @@ class SearchKnowledgeInput(BaseModel):
         ),
     )
 
+class DashboardSummaryResponse(BaseModel):
+    total_users: int
+    total_doctors: int
+    total_patients: int
+    total_appointments_today: int
+    revenue_today: Decimal = Field(default=Decimal(0), description="Doanh thu hôm nay")
 
+class AppointmentDetailOut(AppointmentOut):
+    examination: ExaminationOut | None = None
+    payment: PaymentOut | None = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 DoctorOut.model_rebuild()
 DoctorScheduleOut.model_rebuild()
@@ -747,3 +758,4 @@ AppointmentOut.model_rebuild()
 ExaminationOut.model_rebuild()
 PrescriptionDetailOut.model_rebuild()
 PrescriptionOut.model_rebuild()
+AppointmentDetailOut.model_rebuild()

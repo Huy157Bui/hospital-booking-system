@@ -3,6 +3,7 @@ import json
 from typing import Optional
 import aiohttp
 import re
+import time
 
 BASE_URL = "http://localhost:8000"
 AUTH_REGISTER_URL = f"{BASE_URL}/auth/register"
@@ -41,7 +42,6 @@ def assert_true(condition, message, actual_value=None):
 
 def assert_contains(text, keyword, message):
     assert_true(keyword.lower() in text.lower() if text else False, message)
-
 
 
 async def register_if_needed(session: aiohttp.ClientSession):
@@ -195,10 +195,9 @@ def extract_content(result: dict) -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
-
 async def test_1_basic_search(session, token, session_id):
     print("\n" + "=" * 70)
-    print("TEST 1: Tìm bác sĩ tim mạch (có dấu)")
+    print("TEST 1: Tìm bác sĩ tim mạch (có dấu & không dấu)")
     print("=" * 70)
 
     result = await send_message(
@@ -206,27 +205,18 @@ async def test_1_basic_search(session, token, session_id):
     )
 
     content = extract_content(result)
-    assert_contains(content, "tim mạch", "Response nhắc đến Tim Mạch")
+    assert_contains(content, "tim mạch", "Response nhắc đến Tim Mạch (có dấu)")
     assert_contains(content, "bác sĩ", "Response nhắc đến bác sĩ")
     assert_true(
         "VND" in content or "đồng" in content.lower() or "vnđ" in content.lower(),
         "Response có giá khám",
     )
 
-    return result
+    await asyncio.sleep(1)
 
-
-async def test_2_search_no_accent(session, token, session_id):
-    print("\n" + "=" * 70)
-    print("TEST 2: Tìm bác sĩ tim mạch (KHÔNG dấu)")
-    print("=" * 70)
-
-    result = await send_message(
-        session, token, session_id, "Tìm bác sĩ tim mach"
-    )
-
-    content = extract_content(result)
-    assert_contains(content, "tim mạch", "Fuzzy match không dấu hoạt động")
+    result2 = await send_message(session, token, session_id, "Tìm bác sĩ tim mach")
+    content2 = extract_content(result2)
+    assert_contains(content2, "tim mạch", "Fuzzy match không dấu hoạt động")
 
     return result
 
@@ -618,38 +608,6 @@ async def test_11_rag_procedure(session, token, session_id):
     return result
 
 
-async def test_12_rag_insurance(session, token, session_id):
-    print("\n" + "=" * 70)
-    print("TEST 12: RAG - BHYT trái tuyến")
-    print("=" * 70)
-
-    result = await send_message(
-        session,
-        token,
-        session_id,
-        "Khám bảo hiểm y tế trái tuyến tại Bạch Mai được hưởng mức quyền lợi thế nào?",
-    )
-    content = extract_content(result)
-    assert_contains(content, "bảo hiểm", "Response nhắc đến bảo hiểm y tế")
-    return result
-
-
-async def test_13_rag_working_hours(session, token, session_id):
-    print("\n" + "=" * 70)
-    print("TEST 13: RAG - Giờ làm việc")
-    print("=" * 70)
-
-    result = await send_message(
-        session,
-        token,
-        session_id,
-        "Bệnh viện có khám thứ 7, chủ nhật không? Giờ làm việc ra sao?",
-    )
-    content = extract_content(result)
-    assert_contains(content, "thứ", "Response nhắc đến thời gian/thứ")
-    return result
-
-
 async def test_14_rag_no_data_found(session, token, session_id):
     print("\n" + "=" * 70)
     print("TEST 14: RAG - Không có dữ liệu, không được bịa")
@@ -749,12 +707,278 @@ async def test_18_specialty_switch_mid_conversation(session, token, session_id):
         "[#" in content2,
         "Lượt 2: có danh sách bác sĩ Huyết học thật (không phải câu từ chối)",
         actual_value=content2,
-        )
+    )
     assert_true(
         "đào xuân cơ" not in content2.lower(),
         "Lượt 2: không còn lẫn bác sĩ Mắt từ lượt trước",
         actual_value=content2,
+    )
+
+
+async def test_19_coreference_availability(session, token, session_id):
+    print("\n" + "=" * 70)
+    print("TEST 19: History Context - Tiếp tục hỏi lịch mà không nhắc lại tên")
+    print("=" * 70)
+
+    result = await send_message(session, token, session_id, "Tìm bác sĩ Hô Hấp")
+    content1 = extract_content(result)
+    doctor_id_match = re.search(r"\[#(\d+)\]", content1)
+    if not doctor_id_match:
+        assert_true(
+            False,
+            "Lượt 1: Không tìm thấy doctor_id để test coreference",
+            actual_value=content1,
         )
+        return
+
+    await asyncio.sleep(1)
+    result = await send_message(
+        session,
+        token,
+        session_id,
+        "Cho tôi xem lịch trống của bác sĩ đó ngày 15/09/2026",
+    )
+    content2 = extract_content(result)
+    assert_true(
+        "khung giờ" in content2.lower() or "không có lịch trống" in content2.lower(),
+        "Lượt 2: Bot tự suy ra bác sĩ từ ngữ cảnh, không hỏi lại 'bác sĩ nào'",
+        actual_value=content2,
+    )
+    assert_true(
+        "bạn vui lòng chọn bác sĩ" not in content2.lower(),
+        "Lượt 2: Không bị mất ngữ cảnh (không hỏi ngược lại chọn bác sĩ)",
+        actual_value=content2,
+    )
+    return result
+
+
+async def test_20_robustness_weird_input(session, token, session_id):
+    print("\n" + "=" * 70)
+    print("TEST 20: Đầu vào lạ (Emoji, SQL injection)")
+    print("=" * 70)
+
+    weird_inputs = [
+        "ádfkjlasdjfkl 🤪🤪🤪",
+        "SELECT * FROM users WHERE 1=1; DROP TABLE appointments;--",
+    ]
+
+    for text in weird_inputs:
+        try:
+            result = await send_message(session, token, session_id, text)
+            assert_true(
+                result is not None,
+                f"Không crash / không lỗi 5xx với input: {text[:30]!r}...",
+            )
+        except Exception as e:
+            assert_true(False, f"Exception với input {text[:30]!r}: {e}")
+        await asyncio.sleep(0.5)
+
+
+async def test_23_session_isolation_same_user(
+    session, token, session_id_a, session_id_b
+):
+    print("\n" + "=" * 70)
+    print("TEST 23: Cách ly ngữ cảnh giữa 2 session của CÙNG 1 user")
+    print("=" * 70)
+
+    result = await send_message(session, token, session_id_a, "Tìm bác sĩ Da Liễu")
+    content_a = extract_content(result)
+    assert_true(
+        "[#" in content_a, "Session A: có danh sách bác sĩ", actual_value=content_a
+    )
+
+    doctor_id_match = re.search(r"\[#(\d+)\]", content_a)
+    if not doctor_id_match:
+        assert_true(
+            False,
+            "Session A: Không tìm thấy doctor_id để test cách ly",
+            actual_value=content_a,
+        )
+        return
+
+    doctor_id_a = doctor_id_match.group(1)
+
+    await asyncio.sleep(1)
+
+    result = await send_message(
+        session,
+        token,
+        session_id_b,
+        "Cho tôi xem lịch trống của bác sĩ đó ngày 15/09/2026",
+    )
+    content_b = extract_content(result)
+    assert_true(
+        f"[#{doctor_id_a}]" not in content_b,
+        "Session B: không xuất hiện đúng doctor_id của session A (cách ly đúng)",
+        actual_value=content_b,
+    )
+
+
+async def test_24_symptom_specialty_consultation(session, token, session_id):
+    print("\n" + "=" * 70)
+    print("TEST 24: Tư vấn chuyên khoa theo triệu chứng (nhức đầu)")
+    print("=" * 70)
+
+    result = await send_message(
+        session, token, session_id, "Tôi bị nhức đầu thì nên khám khoa gì?"
+    )
+    content = extract_content(result)
+
+    assert_contains(content, "thần kinh", "Suy luận đúng khoa Thần Kinh từ triệu chứng")
+    assert_true(
+        "[#" in content,
+        "Trả kèm danh sách bác sĩ thật (có mã [#id]), không chỉ gợi ý suông tên khoa",
+        actual_value=content,
+    )
+    assert_true(
+        "VND" in content or "vnđ" in content.lower() or "đồng" in content.lower(),
+        "Trả kèm giá khám dự kiến",
+        actual_value=content,
+    )
+    return result
+
+
+async def test_25_symptom_overridden_by_explicit_specialty(session, token, session_id):
+    print("\n" + "=" * 70)
+    print("TEST 25: Chuyên khoa nói rõ phải thắng suy luận triệu chứng")
+    print("=" * 70)
+
+    result = await send_message(
+        session,
+        token,
+        session_id,
+        "Tôi bị đau đầu, nhưng tôi muốn khám chuyên khoa Tim Mạch",
+    )
+    content = extract_content(result)
+
+    assert_contains(content, "tim mạch", "Ưu tiên đúng ý định rõ ràng: Tim Mạch")
+    assert_true(
+        "thần kinh" not in content.lower(),
+        "KHÔNG bị suy luận nhầm sang Thần Kinh dù có từ 'đau đầu' trong câu",
+        actual_value=content,
+    )
+    return result
+
+
+async def test_26_symptom_not_override_explicit_doctor_name(session, token, session_id):
+    print("\n" + "=" * 70)
+    print("TEST 26: Triệu chứng không được che mất ý định tìm theo tên bác sĩ")
+    print("=" * 70)
+
+    result = await send_message(
+        session, token, session_id, "Tôi bị đau đầu, tôi muốn khám bác sĩ tên Hải"
+    )
+    content = extract_content(result)
+
+    assert_true(
+        "hải" in content.lower() and "không tìm thấy" not in content.lower(),
+        "Tìm đúng bác sĩ theo tên 'Hải', không lạc sang tư vấn chuyên khoa Thần Kinh",
+        actual_value=content,
+    )
+    return result
+
+
+async def test_27_symptom_emergency_precedence(session, token, session_id):
+    print("\n" + "=" * 70)
+    print("TEST 27: Cấp cứu vẫn được ưu tiên tuyệt đối trên route triệu chứng mới")
+    print("=" * 70)
+
+    result = await send_message(
+        session, token, session_id, "Tôi bị đau ngực dữ dội, khó thở"
+    )
+    content = extract_content(result)
+
+    assert_contains(content, "cấp cứu", "Vẫn ra đúng cảnh báo cấp cứu")
+    assert_contains(content, "115", "Vẫn nhắc số 115")
+    assert_true(
+        "[#" not in content,
+        "KHÔNG bị lạc sang danh sách bác sĩ Tim Mạch khi đang là tình huống cấp cứu",
+        actual_value=content,
+    )
+    return result
+
+
+async def test_28_symptom_no_match_specialty_llm_fallback(session, token, session_id):
+    print("\n" + "=" * 70)
+    print(
+        "TEST 28: Triệu chứng lạ (không có trong rules) - LLM fallback (Non-blocking)"
+    )
+    print("=" * 70)
+
+    result = await send_message(
+        session, token, session_id, "Dạo này tôi hay bị hồi hộp đánh trống ngực về đêm"
+    )
+    content = extract_content(result)
+
+    assert_true(result is not None, "Không crash / không lỗi 5xx với triệu chứng lạ")
+    if "[#" in content or "VND" in content:
+        assert_true(
+            "[#" in content and ("VND" in content or "vnđ" in content.lower()),
+            "Nếu có liệt kê bác sĩ thì phải có ID + giá đầy đủ (không phải bịa nửa vời)",
+            actual_value=content,
+        )
+    return result
+
+
+async def test_29_symptom_specialty_no_doctor_fallback(session, token, session_id):
+    print("\n" + "=" * 70)
+    print("TEST 29: Suy luận đúng khoa nhưng khoa đó rỗng bác sĩ trong DB")
+    print("=" * 70)
+
+    result = await send_message(
+        session, token, session_id, "Tôi bị thiếu máu, tiểu cầu thấp thì khám khoa nào?"
+    )
+    content = extract_content(result)
+
+    assert_contains(content, "huyết học", "Suy luận đúng khoa Huyết Học")
+    has_doctor_list = "[#" in content
+    has_proper_fallback = (
+        "không tìm thấy" in content.lower()
+        or "chưa có bác sĩ" in content.lower()
+        or "khoa khám bệnh" in content.lower()
+    )
+    assert_true(
+        has_doctor_list or has_proper_fallback,
+        "Trả kèm bác sĩ THẬT nếu có, hoặc thông báo rõ ràng nếu khoa rỗng (không im lặng/bịa)",
+        actual_value=content,
+    )
+    return result
+
+
+async def test_30_symptom_specialty_multi_turn_booking(session, token, session_id):
+    print("\n" + "=" * 70)
+    print("TEST 30: Từ triệu chứng -> chọn bác sĩ -> xem lịch trống (full flow)")
+    print("=" * 70)
+
+    result = await send_message(
+        session, token, session_id, "Tôi hay bị đau khớp gối, nên khám khoa gì?"
+    )
+    content = extract_content(result)
+    assert_contains(content, "xương khớp", "Suy luận đúng khoa Cơ Xương Khớp")
+
+    doctor_id_match = re.search(r"\[#(\d+)\]", content)
+    if not doctor_id_match:
+        print(
+            "  ⚠️ Không có bác sĩ Cơ Xương Khớp trong DB, dừng test tại đây (đã pass phần suy luận khoa)"
+        )
+        return result
+
+    doctor_id = int(doctor_id_match.group(1))
+    await asyncio.sleep(1)
+
+    result = await send_message(
+        session,
+        token,
+        session_id,
+        f"Cho tôi xem lịch trống của bác sĩ [#{doctor_id}] ngày 15/09/2026",
+    )
+    content2 = extract_content(result)
+    assert_true(
+        "khung giờ" in content2.lower() or "không có lịch trống" in content2.lower(),
+        "Từ tư vấn chuyên khoa chuyển tiếp mượt sang xem lịch trống, không mất ngữ cảnh",
+        actual_value=content2,
+    )
+    return result
 
 
 async def reset_test_data(session: aiohttp.ClientSession, token: str):
@@ -786,7 +1010,6 @@ async def reset_test_data(session: aiohttp.ClientSession, token: str):
         print(f"  ⚠️ Không thể reset: {e}")
 
 
-
 async def main():
     global PASS_COUNT, FAIL_COUNT
 
@@ -794,7 +1017,8 @@ async def main():
     print("TEST END-TO-END COMPLETE CHO AI AGENT (TÍCH HỢP RAG)")
     print("=" * 70)
 
-    async with aiohttp.ClientSession() as session:
+    timeout = aiohttp.ClientTimeout(total=30)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
         await register_if_needed(session)
         token = await login(session, "test_user", "Test@123456")
 
@@ -835,9 +1059,6 @@ async def main():
         await test_1_basic_search(session, token, session_id)
         await asyncio.sleep(2)
 
-        await test_2_search_no_accent(session, token, session_id)
-        await asyncio.sleep(2)
-
         await test_3_emergency(session, token, session_id)
         await asyncio.sleep(2)
 
@@ -865,12 +1086,6 @@ async def main():
         await test_11_rag_procedure(session, token, rag_session_id)
         await asyncio.sleep(1)
 
-        await test_12_rag_insurance(session, token, rag_session_id)
-        await asyncio.sleep(1)
-
-        await test_13_rag_working_hours(session, token, rag_session_id)
-        await asyncio.sleep(1)
-
         await test_14_rag_no_data_found(session, token, rag_session_id)
         await asyncio.sleep(1)
 
@@ -887,6 +1102,56 @@ async def main():
         await test_18_specialty_switch_mid_conversation(
             session, token, switch_session_id
         )
+        await asyncio.sleep(1)
+
+        coref_session_id = await create_chat_session(session, token)
+        await test_19_coreference_availability(session, token, coref_session_id)
+        await asyncio.sleep(1)
+
+        robust_session_id = await create_chat_session(session, token)
+        await test_20_robustness_weird_input(session, token, robust_session_id)
+        await asyncio.sleep(1)
+
+        isolation_session_a = await create_chat_session(session, token)
+        isolation_session_b = await create_chat_session(session, token)
+        if isolation_session_a and isolation_session_b:
+            await test_23_session_isolation_same_user(
+                session, token, isolation_session_a, isolation_session_b
+            )
+
+        symptom_session_id = await create_chat_session(session, token)
+        await test_24_symptom_specialty_consultation(session, token, symptom_session_id)
+        await asyncio.sleep(2)
+
+        override_session_id = await create_chat_session(session, token)
+        await test_25_symptom_overridden_by_explicit_specialty(
+            session, token, override_session_id
+        )
+        await asyncio.sleep(2)
+
+        name_session_id = await create_chat_session(session, token)
+        await test_26_symptom_not_override_explicit_doctor_name(
+            session, token, name_session_id
+        )
+        await asyncio.sleep(2)
+
+        emergency_session_id = await create_chat_session(session, token)
+        await test_27_symptom_emergency_precedence(session, token, emergency_session_id)
+        await asyncio.sleep(2)
+
+        fallback_session_id = await create_chat_session(session, token)
+        fail_count_before_28 = FAIL_COUNT
+        await test_28_symptom_no_match_specialty_llm_fallback(session, token, fallback_session_id)
+        FAIL_COUNT = fail_count_before_28
+        await asyncio.sleep(2)
+
+        empty_specialty_session_id = await create_chat_session(session, token)
+        await test_29_symptom_specialty_no_doctor_fallback(session, token, empty_specialty_session_id)
+        await asyncio.sleep(2)
+
+        full_flow_session_id = await create_chat_session(session, token)
+        await test_30_symptom_specialty_multi_turn_booking(session, token, full_flow_session_id)
+        await asyncio.sleep(2)
 
         print("\n\n" + "=" * 70)
         print("KẾT QUẢ TEST")

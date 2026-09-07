@@ -21,26 +21,26 @@ from app.dependencies.repos import (
     ChatMessageRepoDep,
     RefreshTokenRepoDep,
 )
-from app.repositories import MedicineRepository
 from app.services import (
     AIChatService,
+    IntentExtractionService,
     AppointmentService,
     AuthService,
-    DoctorSearchService,
     DoctorService,
-    EmergencyService,
-    LLMService,
     PatientService,
     PaymentService,
-    RAGService,
     ReportService,
     ScheduleService,
-    SpecialtyDetectionService,
     SpecialtyService,
     UserService,
     ChatSessionService,
     AgentChatService,
     MedicineService,
+    DoctorSearchService,
+    LLMService,
+    EmergencyService,
+    RAGService,
+    SpecialtyDetectionService,
 )
 
 
@@ -181,8 +181,6 @@ def get_medicine_service(
 
 MedicineServiceDep = Annotated[MedicineService, Depends(get_medicine_service)]
 
-
-
 _rag_service_instance: RAGService | None = None
 _llm_service_instance: LLMService | None = None
 _specialty_detection_service_instance: SpecialtyDetectionService | None = None
@@ -241,27 +239,38 @@ DoctorSearchServiceDep = Annotated[
     DoctorSearchService, Depends(get_doctor_search_service)
 ]
 
+def get_intent_extraction_service(
+    specialty_detector: SpecialtyDetectionServiceDep,
+    specialty_repo: SpecialtyRepoDep,
+) -> IntentExtractionService:
+    return IntentExtractionService(
+        specialty_detector=specialty_detector,
+        specialty_repo=specialty_repo
+    )
+
+IntentExtractionServiceDep = Annotated[
+    IntentExtractionService, Depends(get_intent_extraction_service)
+]
 
 def get_ai_chat_service(
-    specialty_detector: SpecialtyDetectionServiceDep,
+    intent_service: IntentExtractionServiceDep,
     doctor_search: DoctorSearchServiceDep,
     rag_service: RAGServiceDep,
     emergency_service: EmergencyServiceDep,
     llm_service: LLMServiceDep,
 ) -> AIChatService:
     return AIChatService(
-        specialty_detector=specialty_detector,
+        intent_service=intent_service,
         doctor_search=doctor_search,
         rag_service=rag_service,
         emergency_service=emergency_service,
         llm_service=llm_service,
     )
 
-
 AIChatServiceDep = Annotated[AIChatService, Depends(get_ai_chat_service)]
 
 def get_agent_chat_service(
-    specialty_detector: SpecialtyDetectionServiceDep,
+    intent_service: IntentExtractionServiceDep,
     doctor_search: DoctorSearchServiceDep,
     rag_service: RAGServiceDep,
     emergency_service: EmergencyServiceDep,
@@ -271,7 +280,7 @@ def get_agent_chat_service(
     ai_chat_service: AIChatServiceDep,
 ) -> AgentChatService:
     return AgentChatService(
-        specialty_detector=specialty_detector,
+        intent_service=intent_service,
         doctor_search=doctor_search,
         rag_service=rag_service,
         emergency_service=emergency_service,
