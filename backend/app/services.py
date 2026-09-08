@@ -1499,13 +1499,31 @@ class SpecialtyDetectionService:
         text_norm = re.sub(r'[.,!?;:()\[\]{}"\'\\]', " ", text_norm)
         tokens = text_norm.split()
 
-        if any(token in ["nhi", "nhi khoa", "bé", "trẻ em", "trẻ nhỏ", "sơ sinh", "cháu", "con",
-                         "bé nhà em", "cháu nhà em", "trẻ sốt", "trẻ ho"] for token in tokens):
+        if any(
+            token
+            in [
+                "nhi",
+                "nhi khoa",
+                "bé",
+                "trẻ em",
+                "trẻ nhỏ",
+                "sơ sinh",
+                "cháu",
+                "con",
+                "bé nhà em",
+                "cháu nhà em",
+                "trẻ sốt",
+                "trẻ ho",
+            ]
+            for token in tokens
+        ):
             return "Nhi Khoa"
         if "con" in tokens and "tôi" in tokens:
             return "Nhi Khoa"
 
-        if any(term in text_norm for term in ["cấp cứu", "a9", "nguy cấp", "nguy kịch"]):
+        if any(
+            term in text_norm for term in ["cấp cứu", "a9", "nguy cấp", "nguy kịch"]
+        ):
             return "Cấp Cứu A9"
         if any(term in text_norm for term in ["hồi sức", "icu", "thở máy"]):
             return "Hồi Sức Tích Cực"
@@ -1541,15 +1559,33 @@ class RAGService:
             logger.exception("Failed to initialize RAG service")
             self.collection = None
 
-    def _search_sync(self, query: str, top_k: int = 3) -> str:
+    def _search_sync(self, query: str, top_k: int = 3, max_distance: float = 0.5) -> str:
         if not self.collection:
             return ""
         try:
-            results = self.collection.query(query_texts=[query], n_results=top_k)
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=top_k,
+                include=["documents", "distances"],
+            )
             documents = results.get("documents", [[]])[0]
+            distances = results.get("distances", [[]])[0]
             if not documents:
                 return ""
-            return "\n---\n".join(documents)
+
+            logger.info(f"RAG query={query!r} distances={distances}")
+
+            relevant_docs = [
+                doc for doc, dist in zip(documents, distances) if dist <= max_distance
+            ]
+            if not relevant_docs:
+                logger.info(
+                    f"RAG: distance gần nhất = {min(distances):.3f} > ngưỡng {max_distance} "
+                    f"-> coi như không tìm thấy tài liệu liên quan"
+                )
+                return ""
+
+            return "\\n---\\n".join(relevant_docs)
         except Exception:
             logger.exception("RAG search failed for query: %s", query)
             return ""
@@ -1805,8 +1841,8 @@ class IntentExtractionService:
                     if not any(k in clean_name.lower() for k in ["bạch mai", "trung tâm", "khoa", "bệnh viện", "phòng"]):
                         return clean_name
 
-        simple_pattern = r"(?:bác sĩ|BS)\s+([A-ZÀ-Ỹ][a-zà-ỹ]+(?:\s+[A-ZÀ-Ỹ][a-zà-ỹ]+)+)"
-        match2 = re.search(simple_pattern, msg)
+        simple_pattern = r"(?:bác sĩ|BS)\\s+([A-ZÀ-Ỹ][a-zà-ỹ]+(?:\\s+[A-ZÀ-Ỹ][a-zà-ỹ]+)+)"
+        match2 = re.search(simple_pattern, msg, re.IGNORECASE)
         if match2:
             return match2.group(1).strip()
 
@@ -1842,27 +1878,42 @@ class IntentExtractionService:
         if not chat_history:
             return None
         for turn in reversed(chat_history[-10:]):
-            content = turn.get("content", "") if isinstance(turn, dict) else getattr(turn, "content", "")
+            content = (
+                turn.get("content", "")
+                if isinstance(turn, dict)
+                else getattr(turn, "content", "")
+            )
             matches = re.findall(r"\[#(\d{3,})\]", content)
             if matches:
                 doctor_id = int(matches[-1])
-                logger.info(f"  Parse doctor_id từ history (turn gần nhất): {doctor_id}")
+                logger.info(
+                    f"  Parse doctor_id từ history (turn gần nhất): {doctor_id}"
+                )
                 return doctor_id
         return None
 
-    def extract_doctor_name_from_history(self, chat_history: Optional[list[Any]]) -> Optional[str]:
+    def extract_doctor_name_from_history(
+        self, chat_history: Optional[list[Any]]
+    ) -> Optional[str]:
         if not chat_history:
             return None
         for turn in reversed(chat_history[-5:]):
-            content = turn.get("content", "") if isinstance(turn, dict) else getattr(turn, "content", "")
+            content = (
+                turn.get("content", "")
+                if isinstance(turn, dict)
+                else getattr(turn, "content", "")
+            )
             matches = re.findall(
-                r"(?:bác sĩ|BS|bs)\s+([A-ZÀ-Ỹ][a-zà-ỹ]*(?:\s+[A-ZÀ-Ỹ][a-zà-ỹ]*)+)", content
+                r"(?:bác sĩ|BS|bs)\s+([A-ZÀ-Ỹ][a-zà-ỹ]*(?:\s+[A-ZÀ-Ỹ][a-zà-ỹ]*)+)",
+                content,
             )
             if matches:
                 return matches[-1]
         return None
 
-    def extract_availability_intent(self, user_message: str, chat_history: Optional[list[Any]]) -> Optional[dict]:
+    def extract_availability_intent(
+        self, user_message: str, chat_history: Optional[list[Any]]
+    ) -> Optional[dict]:
         msg = user_message.lower()
 
         date_match = re.search(DATE_PATTERN, user_message)
@@ -1893,6 +1944,13 @@ class IntentExtractionService:
         if doctor_name and specialty_name and doctor_name.lower() == specialty_name.lower():
             logger.info(f"  Doctor name '{doctor_name}' trùng specialty — bỏ doctor_name")
             doctor_name = None
+
+        if doctor_name and specialty_name and "chuyên khoa" not in msg:
+            logger.info(
+                f"  Bỏ specialty suy luận '{specialty_name}' vì đã có doctor_name rõ ràng "
+                f"và người dùng không nói rõ chuyên khoa (tránh AND nhầm loại mất kết quả)"
+            )
+            specialty_name = None
 
         max_fee = self.extract_max_fee(user_message)
 
@@ -1985,11 +2043,19 @@ class AIChatService:
         if found:
             return {
                 "reply": self._format_doctors_response(doctors),
-                "suggestions": ["Đặt lịch khám", "Xem chi tiết bác sĩ", "Tìm bác sĩ khác"],
+                "suggestions": [
+                    "Đặt lịch khám",
+                    "Xem chi tiết bác sĩ",
+                    "Tìm bác sĩ khác",
+                ],
             }
         return {
             "reply": self._build_not_found_message(specialty, max_fee, doctor_name),
-            "suggestions": ["Đến Khoa Khám bệnh", "Xem quy trình khám", "Tư vấn chuyên khoa khác"],
+            "suggestions": [
+                "Đến Khoa Khám bệnh",
+                "Xem quy trình khám",
+                "Tư vấn chuyên khoa khác",
+            ],
         }
 
     async def _answer_specialty_consultation(self, specialty: str) -> dict:
@@ -2017,6 +2083,10 @@ class AIChatService:
         doctor_name = self.intent_service.extract_doctor_name(user_message)
         has_explicit_doctor_intent = self.intent_service.has_explicit_doctor_intent(user_message)
         is_rag_query = self.intent_service.is_rag_query(user_message)
+
+        if doctor_name and specialty and "chuyên khoa" not in user_message.lower():
+            logger.info(f"  (legacy) Bỏ specialty '{specialty}' vì đã có doctor_name rõ ràng")
+            specialty = None
 
         logger.info(
             f"=== RESOLVE (legacy) === specialty={specialty!r} max_fee={max_fee!r} "
@@ -2194,7 +2264,9 @@ class AgentChatService:
         if not specialty:
             return None
 
-        logger.info(f"=== DETERMINISTIC ROUTING: Specialty consultation intent detected: {specialty} ===")
+        logger.info(
+            f"=== DETERMINISTIC ROUTING: Specialty consultation intent detected: {specialty} ==="
+        )
         tool_result = await self._execute_read_tool(
             "search_doctors",
             {"specialty_name": specialty, "doctor_name": None, "max_fee": None},
@@ -2228,13 +2300,14 @@ class AgentChatService:
         if availability_result is not None:
             return availability_result
 
-        search_result = await self._route_search_intent(user_message, chat_history)
-        if search_result is not None:
-            return search_result
+        if not self._is_in_booking_flow(user_message):
+            search_result = await self._route_search_intent(user_message, chat_history)
+            if search_result is not None:
+                return search_result
 
-        specialty_result = await self._route_specialty_consultation_intent(user_message, chat_history)
-        if specialty_result is not None:
-            return specialty_result
+            specialty_result = await self._route_specialty_consultation_intent(user_message, chat_history)
+            if specialty_result is not None:
+                return specialty_result
 
         logger.info("=" * 60)
         logger.info(f"AGENT LOOP BẮT ĐẦU - User: {current_user.username}")

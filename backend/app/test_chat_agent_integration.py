@@ -623,28 +623,29 @@ async def test_14_rag_no_data_found(session, token, session_id):
     assert_true(
         "xin lỗi" in content.lower()
         or "chưa lấy được thông tin" in content.lower()
-        or "thử lại" in content.lower(),
+        or "thử lại" in content.lower()
+        or "không tìm thấy" in content.lower(),
         "Response từ chối trả lời bịa, yêu cầu thử lại hoặc liên hệ",
         actual_value=content,
-    )
+        )
     return result
 
 
 async def test_15_hallucination_empty_specialty(session, token, session_id):
     print("\n" + "=" * 70)
-    print("TEST 15: Chống ảo giác - Khoa Dược rỗng DB")
+    print("TEST 15: Chống ảo giác - Khoa Kiểm Soát Nhiễm Khuẩn rỗng DB")
     print("=" * 70)
 
     result = await send_message(
         session,
         token,
         session_id,
-        "Tôi cần tư vấn về thuốc, có bác sĩ Khoa Dược nào khám không?",
+        "Tôi bị nhiễm khuẩn, có bác sĩ Khoa Kiểm Soát Nhiễm Khuẩn nào khám không?",
     )
     content = extract_content(result)
     assert_true(
         "không tìm thấy" in content.lower() or "không có bác sĩ" in content.lower(),
-        "Không tự bịa bác sĩ Khoa Dược khi DB rỗng",
+        "Không tự bịa bác sĩ Khoa Kiểm Soát Nhiễm Khuẩn khi DB rỗng",
         actual_value=content,
     )
 
