@@ -86,6 +86,9 @@ class User(Base):
     chat_sessions = relationship("ChatSession", back_populates="user", uselist=True)
     refresh_tokens = relationship("RefreshToken", back_populates="user", uselist=True)
 
+    def __str__(self) -> str:
+        return f"{self.username} - {self.full_name}"
+
 class Patient(Base):
     __tablename__ = "patients"
 
@@ -148,6 +151,13 @@ class Specialty(Base):
     updated_date = Column(DateTime, onupdate=func.now(), nullable=True)
 
     doctors = relationship("Doctor", back_populates="specialty", uselist=True)
+
+    @property
+    def doctors_display(self):
+        return None
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class Schedule(Base):

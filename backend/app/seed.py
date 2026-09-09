@@ -27,7 +27,7 @@ for logger_name in ("sqlalchemy", "sqlalchemy.engine"):
 warnings.filterwarnings("ignore", message=".*error reading bcrypt version.*")
 
 from sqlalchemy import delete, select, text
-from app.database import AsyncSessionLocal, sync_engine
+from app.database import AsyncSessionLocal, async_engine
 from app.models import (
     Appointment,
     AppointmentStatus,
@@ -107,7 +107,7 @@ async def seed():
 
         password = hash_password("123456")
 
-        print("🏥 Đang nạp 55 Khoa/Phòng thật từ Bạch Mai...")
+        print("Đang nạp 55 Khoa/Phòng thật từ Bạch Mai...")
         units_file = RAW_DIR / "bachmai_don_vi_sach.json"
         with open(units_file, "r", encoding="utf-8") as f:
             units_data = json.load(f)
@@ -158,7 +158,7 @@ async def seed():
             if u_id:
                 specialties_map[str(u_id)] = s.id
 
-        print(f"✅ Đã tạo thành công {len(all_specialty_ids)} Khoa/Phòng!")
+        print(f"Đã tạo thành công {len(all_specialty_ids)} Khoa/Phòng!")
 
         admin = User(
             full_name="Admin System",
@@ -173,7 +173,7 @@ async def seed():
         db.add(admin)
         await db.flush()
 
-        print("👨‍⚕️ Đang nạp 626 Bác sĩ thật từ Bạch Mai...")
+        print("Đang nạp 626 Bác sĩ thật từ Bạch Mai...")
         doctors_file = RAW_DIR / "bachmai_bac_si.json"
         with open(doctors_file, "r", encoding="utf-8") as f:
             doctors_data = json.load(f)
@@ -236,9 +236,9 @@ async def seed():
             doctors.append(doc)
 
         await db.flush()
-        print(f"✅ Đã tạo thành công {len(doctors)} Bác sĩ!")
+        print(f"Đã tạo thành công {len(doctors)} Bác sĩ!")
 
-        print("👤 Đang tạo dữ liệu Bệnh nhân mẫu...")
+        print("Đang tạo dữ liệu Bệnh nhân mẫu...")
         patient_names = [
             "Phạm Văn D",
             "Hoàng Thị E",
@@ -368,7 +368,7 @@ async def seed():
             db.add(Medicine(**md))
         await db.flush()
 
-        print("📅 Đang sinh Lịch làm việc và Ca khám cho các Bác sĩ...")
+        print("Đang sinh Lịch làm việc và Ca khám cho các Bác sĩ...")
         today = datetime.now(UTC).date()
         past_dates = [today - timedelta(days=i) for i in range(15, 0, -1)]
         future_dates = [today + timedelta(days=i) for i in range(14)]
@@ -379,13 +379,16 @@ async def seed():
         if test_date not in future_dates:
             future_dates.append(test_date)
 
-        sample_doctors = (
+        weekdays_future = [d for d in future_dates if d.weekday() < 5]
+        weekdays_past = [d for d in past_dates if d.weekday() < 5]
+
+        past_slots_info = []
+        sample_doctors_past = (
             random.sample(doctors, min(200, len(doctors))) if doctors else []
         )
 
-        past_slots_info = []
-        for doc in sample_doctors:
-            for d in past_dates:
+        for doc in sample_doctors_past:
+            for d in weekdays_past:
                 if random.random() < 0.3:
                     continue
                 sched = Schedule(
@@ -415,14 +418,13 @@ async def seed():
                     )
         await db.flush()
 
-        print("📅 Đang sinh Lịch làm việc cho 14 ngày tương lai...")
+        print(
+            "Đang sinh Lịch làm việc cho 14 ngày tương lai (trừ T7, CN) cho TẤT CẢ bác sĩ..."
+        )
         future_slots_info = []
-        for doc in sample_doctors:
-            for d in future_dates:
-                if d == test_date:
-                    continue
-                if random.random() < 0.3:
-                    continue
+
+        for doc in doctors:
+            for d in weekdays_future:
                 sched = Schedule(
                     doctor_id=doc.id, work_date=d, status=ScheduleStatus.OPEN
                 )
@@ -450,7 +452,7 @@ async def seed():
                     )
         await db.flush()
 
-        print("📋 Đang tạo Hồ sơ khám bệnh và Lịch hẹn mẫu...")
+        print("Đang tạo Hồ sơ khám bệnh và Lịch hẹn mẫu...")
         past_appointments_info = []
         for pat in patients:
             for _ in range(random.randint(1, 2)):
@@ -607,7 +609,7 @@ async def seed():
                 )
                 db.add(payment)
 
-        print("📌 Đang TẠO THÊM lịch khám demo cho bác sĩ doc_1...")
+        print("Đang TẠO THÊM lịch khám demo cho bác sĩ doc_1...")
         doctor_1 = None
         for doc in doctors:
             if doc.id == 2:
@@ -624,7 +626,7 @@ async def seed():
                 doctor_1 = doctor_result.scalar_one_or_none()
 
         if doctor_1:
-            print(f"✅ Tìm thấy bác sĩ doc_1 với ID={doctor_1.id}")
+            print(f"Tìm thấy bác sĩ doc_1 với ID={doctor_1.id}")
             demo_patients = patients[:6]
             statuses = [
                 AppointmentStatus.PENDING,
@@ -756,10 +758,10 @@ async def seed():
                         db.add(payment)
             await db.flush()
             print(
-                f"✅ Đã tạo thêm 6 lịch khám demo cho bác sĩ doc_1 (ID={doctor_1.id})"
+                f"Đã tạo thêm 6 lịch khám demo cho bác sĩ doc_1 (ID={doctor_1.id})"
             )
         else:
-            print("⚠️ Không tìm thấy bác sĩ doc_1")
+            print("Không tìm thấy bác sĩ doc_1")
 
         doctors_by_specialty = defaultdict(list)
         for doc in doctors:
@@ -773,7 +775,7 @@ async def seed():
         guaranteed_doctors = [doc for doc in doctors if doc.id in guaranteed_ids]
 
         print(
-            f"📌 Đang TẠO CHẮC CHẮN lịch hẹn cho {len(guaranteed_doctors)} bác sĩ (top 15 + top 5 rẻ nhất mỗi khoa)..."
+            f"Đang TẠO CHẮC CHẮN lịch hẹn cho {len(guaranteed_doctors)} bác sĩ (top 15 + top 5 rẻ nhất mỗi khoa)..."
         )
 
         for doc in guaranteed_doctors:
@@ -821,7 +823,7 @@ async def seed():
                         db.add(appt)
                         new_slot.status = ScheduleSlotStatus.BOOKED
 
-        print("📌 Đang TẠO CHẮC CHẮN lịch hẹn cho test_date (15/09/2026)...")
+        print("Đang TẠO CHẮC CHẮN lịch hẹn cho test_date (15/09/2026)...")
         for doc in guaranteed_doctors:
             sched_result = await db.execute(
                 select(Schedule).where(
@@ -855,8 +857,8 @@ async def seed():
 
         await db.commit()
         await db.close()
-        sync_engine.dispose()
-        print(f"🎉 HOÀN THÀNH SEED! Đã tạo lịch hôm nay cho {len(guaranteed_doctors)} bác sĩ.")
+        await async_engine.dispose()
+        print(f"HOÀN THÀNH SEED! Đã tạo lịch hôm nay cho {len(guaranteed_doctors)} bác sĩ.")
 
 
 if __name__ == "__main__":

@@ -32,10 +32,10 @@ def assert_true(condition, message, actual_value=None):
     global PASS_COUNT, FAIL_COUNT
     if condition:
         PASS_COUNT += 1
-        print(f"  ✅ PASS: {message}")
+        print(f"   PASS: {message}")
     else:
         FAIL_COUNT += 1
-        print(f"  ❌ FAIL: {message}")
+        print(f"   FAIL: {message}")
         if actual_value is not None:
             print(f"      → Giá trị thực tế: {actual_value!r}")
 
@@ -50,13 +50,13 @@ async def register_if_needed(session: aiohttp.ClientSession):
         async with session.post(AUTH_REGISTER_URL, json=REGISTER_DATA) as resp:
             response_text = await resp.text()
             if resp.status in [200, 201]:
-                print("  ✅ Đăng ký thành công")
+                print("   Đăng ký thành công")
             elif resp.status in [400, 409]:
-                print("  ℹ️ User đã tồn tại")
+                print("   User đã tồn tại")
             else:
-                print(f"  ⚠️ Status: {resp.status}, Response: {response_text[:200]}")
+                print(f"   Status: {resp.status}, Response: {response_text[:200]}")
     except Exception as e:
-        print(f"  ❌ Lỗi: {e}")
+        print(f"   Lỗi: {e}")
 
 
 async def register_user_2(session: aiohttp.ClientSession):
@@ -73,13 +73,13 @@ async def register_user_2(session: aiohttp.ClientSession):
         async with session.post(AUTH_REGISTER_URL, json=user_2_data) as resp:
             response_text = await resp.text()
             if resp.status in [200, 201]:
-                print("  ✅ Đăng ký user 2 thành công")
+                print("   Đăng ký user 2 thành công")
             elif resp.status in [400, 409]:
-                print("  ℹ️ User 2 đã tồn tại")
+                print("   User 2 đã tồn tại")
             else:
-                print(f"  ⚠️ Status: {resp.status}, Response: {response_text[:200]}")
+                print(f"   Status: {resp.status}, Response: {response_text[:200]}")
     except Exception as e:
-        print(f"  ❌ Lỗi: {e}")
+        print(f"   Lỗi: {e}")
 
 
 async def login(
@@ -98,12 +98,12 @@ async def login(
                 data = json.loads(response_text)
                 token = data.get("access_token")
                 if token:
-                    print("  ✅ Đăng nhập thành công")
+                    print("   Đăng nhập thành công")
                     return token
-            print(f"  ❌ Đăng nhập thất bại: {response_text[:200]}")
+            print(f"   Đăng nhập thất bại: {response_text[:200]}")
             return None
     except Exception as e:
-        print(f"  ❌ Lỗi: {e}")
+        print(f"   Lỗi: {e}")
         return None
 
 
@@ -125,12 +125,12 @@ async def create_chat_session(
             if resp.status in [200, 201]:
                 data = json.loads(response_text)
                 session_id = data.get("id") or data.get("session_id")
-                print(f"  ✅ Tạo session thành công (ID: {session_id})")
+                print(f"   Tạo session thành công (ID: {session_id})")
                 return session_id
-            print(f"  ❌ Tạo session thất bại: {response_text[:200]}")
+            print(f"   Tạo session thất bại: {response_text[:200]}")
             return None
     except Exception as e:
-        print(f"  ❌ Lỗi: {e}")
+        print(f"   Lỗi: {e}")
         return None
 
 
@@ -140,7 +140,7 @@ async def send_message(
     session_id: int,
     message: str,
 ) -> Optional[dict]:
-    print(f"\n  📤 Gửi: '{message}'")
+    print(f"\n   Gửi: '{message}'")
     try:
         headers = {
             "Authorization": f"Bearer {token}",
@@ -154,22 +154,22 @@ async def send_message(
             headers=headers,
         ) as resp:
             response_text = await resp.text()
-            print(f"  📥 Status: {resp.status}")
+            print(f"   Status: {resp.status}")
 
             try:
                 response_json = json.loads(response_text)
                 assistant_content = response_json.get("assistant_message", {}).get(
                     "content", ""
                 )
-                print(f"  📥 Full assistant content: {assistant_content!r}")
+                print(f"   Full assistant content: {assistant_content!r}")
             except Exception:
-                print(f"  📥 Full response: {response_text!r}")
+                print(f"   Full response: {response_text!r}")
 
             if resp.status in [200, 201]:
                 return json.loads(response_text)
             return None
     except Exception as e:
-        print(f"  ❌ Lỗi: {e}")
+        print(f"   Lỗi: {e}")
         return None
 
 
@@ -319,11 +319,11 @@ async def test_6_multi_turn_booking_flow(session, token, session_id):
                 break
 
     if not doctor_name:
-        print("  ⚠️ Không extract được tên bác sĩ từ response")
+        print("   Không extract được tên bác sĩ từ response")
         print(f"  Content: {content[:500]}")
         doctor_name = "Đặng Minh Hải"
 
-    print(f"  ℹ️ Sử dụng tên bác sĩ: {doctor_name}")
+    print(f"   Sử dụng tên bác sĩ: {doctor_name}")
 
     await asyncio.sleep(1)
 
@@ -759,7 +759,7 @@ async def test_20_robustness_weird_input(session, token, session_id):
     print("=" * 70)
 
     weird_inputs = [
-        "ádfkjlasdjfkl 🤪🤪🤪",
+        "ádfkjlasdjfkl",
         "SELECT * FROM users WHERE 1=1; DROP TABLE appointments;--",
     ]
 
@@ -960,7 +960,7 @@ async def test_30_symptom_specialty_multi_turn_booking(session, token, session_i
     doctor_id_match = re.search(r"\[#(\d+)\]", content)
     if not doctor_id_match:
         print(
-            "  ⚠️ Không có bác sĩ Cơ Xương Khớp trong DB, dừng test tại đây (đã pass phần suy luận khoa)"
+            "   Không có bác sĩ Cơ Xương Khớp trong DB, dừng test tại đây (đã pass phần suy luận khoa)"
         )
         return result
 
@@ -1002,13 +1002,13 @@ async def reset_test_data(session: aiohttp.ClientSession, token: str):
                             headers=headers,
                         ) as cancel_resp:
                             if cancel_resp.status == 200:
-                                print(f"  ✅ Đã hủy appointment #{appt_id}")
+                                print(f"   Đã hủy appointment #{appt_id}")
                             else:
                                 print(
-                                    f"  ⚠️ Hủy appointment #{appt_id} failed: {cancel_resp.status}"
+                                    f"   Hủy appointment #{appt_id} failed: {cancel_resp.status}"
                                 )
     except Exception as e:
-        print(f"  ⚠️ Không thể reset: {e}")
+        print(f"   Không thể reset: {e}")
 
 
 async def main():
@@ -1024,14 +1024,14 @@ async def main():
         token = await login(session, "test_user", "Test@123456")
 
         if not token:
-            print("\n❌ Không lấy được token, dừng test")
+            print("\n Không lấy được token, dừng test")
             return
 
         await register_user_2(session)
         token_2 = await login(session, "test_user_2", "Test@123456")
 
         if not token_2:
-            print("\n❌ Không lấy được token user 2, dừng test")
+            print("\n Không lấy được token user 2, dừng test")
             return
 
         await reset_test_data(session, token)
@@ -1040,17 +1040,17 @@ async def main():
         session_id = await create_chat_session(session, token)
         session_id_2 = await create_chat_session(session, token_2)
 
-        print(f"\n  🔍 Debug: token={token[:20]}..., token_2={token_2[:20]}...")
-        print(f"  🔍 Debug: session_id={session_id}, session_id_2={session_id_2}")
+        print(f"\n   Debug: token={token[:20]}..., token_2={token_2[:20]}...")
+        print(f"   Debug: session_id={session_id}, session_id_2={session_id_2}")
 
         if not session_id or not session_id_2:
-            print("\n❌ Không tạo được session, dừng test")
+            print("\n Không tạo được session, dừng test")
             return
 
         rag_session_id = await create_chat_session(session, token)
 
         if not rag_session_id:
-            print("\n❌ Không tạo được RAG session, dừng test")
+            print("\n Không tạo được RAG session, dừng test")
             return
 
         print("\n" + "=" * 70)
@@ -1157,14 +1157,14 @@ async def main():
         print("\n\n" + "=" * 70)
         print("KẾT QUẢ TEST")
         print("=" * 70)
-        print(f"  ✅ PASS: {PASS_COUNT}")
-        print(f"  ❌ FAIL: {FAIL_COUNT}")
-        print(f"  📊 Tổng: {PASS_COUNT + FAIL_COUNT} assertions")
+        print(f"   PASS: {PASS_COUNT}")
+        print(f"   FAIL: {FAIL_COUNT}")
+        print(f"   Tổng: {PASS_COUNT + FAIL_COUNT} assertions")
 
         if FAIL_COUNT == 0:
-            print("\n  🎉 TẤT CẢ TEST ĐỀU PASS!")
+            print("\n   TẤT CẢ TEST ĐỀU PASS!")
         else:
-            print(f"\n  ⚠️ CÓ {FAIL_COUNT} TEST FAIL - CẦN KIỂM TRA LẠI!")
+            print(f"\n   CÓ {FAIL_COUNT} TEST FAIL - CẦN KIỂM TRA LẠI!")
 
         print("=" * 70)
 

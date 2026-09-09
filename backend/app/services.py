@@ -1235,7 +1235,8 @@ class ReportService:
                 )
             )
 
-        return PatientsBySpecialtyResponse(items=items)
+        total_patients = sum(item.patient_count for item in items)
+        return PatientsBySpecialtyResponse(items=items, total_patients=total_patients)
 
     async def get_appointments_summary(
         self,
@@ -1431,6 +1432,10 @@ DOCTOR_INTENT_KEYWORDS = [
     "danh sách",
     "phòng khám",
 ]
+
+QUESTION_WORD_STOPWORDS = {
+    "gì", "nào", "sao", "đây", "vậy", "à", "không", "thế nào", "ra sao",
+}
 
 AVAILABILITY_KEYWORDS = ["xem lịch", "lịch trống", "khung giờ", "còn lịch", "lịch khám"]
 
@@ -1665,13 +1670,13 @@ class EmergencyService:
 
     def get_response(self) -> str:
         return (
-            "🚨 **CẢNH BÁO KHẨN CẤP Y TẾ:**\n\n"
+            "**CẢNH BÁO KHẨN CẤP Y TẾ:**\n\n"
             "Các triệu chứng như khó thở dữ dội, đau ngực cấp tính cần được can thiệp y tế NGAY LẬP TỨC!\n\n"
-            "🏥 **Trung tâm Cấp cứu A9 – Bệnh viện Bạch Mai:**\n"
+            "**Trung tâm Cấp cứu A9 – Bệnh viện Bạch Mai:**\n"
             "- **Địa chỉ:** 78 Đường Giải Phóng, Phường Phương Mai, Đống Đa, Hà Nội (Toà nhà A9 - Cổng vào có biển chỉ dẫn cấp cứu trực tiếp).\n"
             "- **Thời gian:** Tiếp nhận bệnh nhân 24/7 (tất cả các ngày trong tuần).\n"
             "- **Hotline Cấp cứu:** 024 3869 3731 hoặc liên hệ ngay **115**.\n\n"
-            "⚠️ *Gia đình vui lòng đưa người bệnh đến thẳng Trung tâm Cấp cứu A9, không chờ đợi đặt lịch trực tuyến.*"
+            " *Gia đình vui lòng đưa người bệnh đến thẳng Trung tâm Cấp cứu A9, không chờ đợi đặt lịch trực tuyến.*"
         )
 
 class LLMService:
@@ -1714,10 +1719,10 @@ class IntentExtractionService:
 
     async def detect_specialty(self, text: str, chat_history: Optional[list[Any]] = None) -> Optional[str]:
         text = text or ""
-        spec_match = re.search(r"chuyên khoa\s+([^\d,.!?]+)", text, re.IGNORECASE)
+        spec_match = re.search(r"chuyên khoa\\s+([^\\d,.!?]+)", text, re.IGNORECASE)
         if spec_match:
             candidate = spec_match.group(1).strip()
-            if candidate:
+            if candidate and candidate.lower() not in QUESTION_WORD_STOPWORDS:
                 return candidate
 
         if re.search(r"tim\s*m[ạa]ch", text, re.IGNORECASE):
@@ -1930,7 +1935,9 @@ class IntentExtractionService:
 
         day, month, year = date_match.groups()
         work_date = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-        logger.info(f"  Availability intent detected: doctor_id={doctor_id}, work_date={work_date}")
+        logger.info(
+            f"  Availability intent detected: doctor_id={doctor_id}, work_date={work_date}"
+        )
         return {"doctor_id": doctor_id, "work_date": work_date}
 
     async def extract_search_intent(self, user_message: str) -> Optional[dict]:
@@ -1941,8 +1948,14 @@ class IntentExtractionService:
         specialty_name = await self.detect_specialty(user_message)
         doctor_name = self.extract_doctor_name(user_message)
 
-        if doctor_name and specialty_name and doctor_name.lower() == specialty_name.lower():
-            logger.info(f"  Doctor name '{doctor_name}' trùng specialty — bỏ doctor_name")
+        if (
+            doctor_name
+            and specialty_name
+            and doctor_name.lower() == specialty_name.lower()
+        ):
+            logger.info(
+                f"  Doctor name '{doctor_name}' trùng specialty — bỏ doctor_name"
+            )
             doctor_name = None
 
         if doctor_name and specialty_name and "chuyên khoa" not in msg:
@@ -1955,14 +1968,17 @@ class IntentExtractionService:
         max_fee = self.extract_max_fee(user_message)
 
         if not specialty_name and not doctor_name:
-            if not re.search(r"giá\s+khám|giá\s+dưới|giá\s+trên", msg):
+            if not re.search(r"giá\\s+khám|giá\\s+dưới|giá\\s+trên", msg):
                 specialty_match = re.search(
-                    r"(?:khám|đặt lịch khám)\s+(?:chuyên khoa\s+)?([^\d,.!?]+)", msg
+                    r"(?:khám|đặt lịch khám)\\s+(?:chuyên khoa\\s+)?([^\\d,.!?]+)", msg
                 )
                 if specialty_match:
                     candidate = specialty_match.group(1).strip()
                     phrase_stopwords = ["bác sĩ", "bs "]
-                    word_stopwords = {"giá", "dưới", "trên", "nghìn", "đồng", "vnd", "tiền", "tên"}
+                    word_stopwords = {
+                        "giá", "dưới", "trên", "nghìn", "đồng", "vnd", "tiền", "tên",
+                        "gì", "nào", "sao", "đây", "thế nào", "vậy", "à", "không",
+                    }
                     candidate_words = set(candidate.split())
                     has_phrase_stopword = any(p in candidate for p in phrase_stopwords)
                     has_word_stopword = bool(candidate_words.intersection(word_stopwords))
@@ -1970,6 +1986,9 @@ class IntentExtractionService:
                         specialty_name = candidate
 
         logger.info(f"  Search intent parsed: specialty={specialty_name!r} doctor={doctor_name!r} fee={max_fee!r}")
+        if not specialty_name and not doctor_name and not max_fee:
+            return None
+
         return {"specialty_name": specialty_name, "doctor_name": doctor_name, "max_fee": max_fee}
 
 
@@ -2327,7 +2346,7 @@ class AgentChatService:
             if not tool_calls and self._is_in_booking_flow(user_message):
                 logger.info("  → Đang trong booking flow, xử lý deterministic")
             elif self._claims_booking_success_without_tool(getattr(ai_response, "content", ""), tool_calls):
-                logger.error("  🚨 LLM claim đặt lịch thành công nhưng KHÔNG gọi tool — chặn lại")
+                logger.error("   LLM claim đặt lịch thành công nhưng KHÔNG gọi tool — chặn lại")
                 return {
                     "reply": "Xin lỗi, tôi chưa thể xác nhận đặt lịch. Vui lòng thử lại yêu cầu đặt lịch.",
                     "suggestions": ["Xem lịch trống", "Tìm bác sĩ"],
@@ -2445,11 +2464,11 @@ class AgentChatService:
             retry_response = await asyncio.wait_for(llm_with_tools.ainvoke(retry_messages), timeout=60.0)
             retry_tool_calls = getattr(retry_response, "tool_calls", None) or []
             if retry_tool_calls:
-                logger.info(f"  ✅ Retry thành công: LLM gọi {len(retry_tool_calls)} tool")
+                logger.info(f"   Retry thành công: LLM gọi {len(retry_tool_calls)} tool")
                 return retry_response, retry_tool_calls, retry_messages
-            logger.warning("  ❌ Retry vẫn không gọi tool")
+            logger.warning("   Retry vẫn không gọi tool")
         except asyncio.TimeoutError:
-            logger.error("  ❌ Retry timeout")
+            logger.error("   Retry timeout")
         return ai_response, tool_calls, messages
 
     async def _finalize_after_max_rounds(self, messages):
@@ -2484,7 +2503,7 @@ class AgentChatService:
                 return await self.legacy_chat_service.chat(user_message, chat_history)
 
             if self.intent_service.requires_tool_call(user_message):
-                logger.error("  🚨 Intent cần tool nhưng LLM không gọi — từ chối thay vì dùng content bịa")
+                logger.error("   Intent cần tool nhưng LLM không gọi — từ chối thay vì dùng content bịa")
                 return {
                     "reply": "Xin lỗi, tôi chưa lấy được thông tin chính xác. Bạn vui lòng thử lại.",
                     "suggestions": ["Thử lại", "Liên hệ hotline"],
@@ -2674,7 +2693,7 @@ class AgentChatService:
                 _pending_bookings.pop(session_id, None)
                 return {
                     "reply": (
-                        f"✅ Đã đặt lịch khám thành công (mã lịch hẹn #{appointment.id}). "
+                        f" Đã đặt lịch khám thành công (mã lịch hẹn #{appointment.id}). "
                         "Bạn vui lòng đến trước giờ hẹn 15 phút để làm thủ tục."
                     ),
                     "suggestions": ["Xem lịch hẹn của tôi", "Đặt thêm lịch khác"],
@@ -2707,7 +2726,7 @@ class AgentChatService:
             return False
         for match in re.findall(r'\[#(\d+)\]', content):
             if int(match) < 100:
-                logger.warning(f"  🚨 Phát hiện doctor_id nhỏ bất thường: #{match}")
+                logger.warning(f"   Phát hiện doctor_id nhỏ bất thường: #{match}")
                 return True
         return False
 
@@ -2737,7 +2756,7 @@ class AgentChatService:
             r"tôi sẽ tìm kiếm thêm", r"hãy chờ tôi gọi", r"tôi sẽ thực hiện điều này",
         ]
         if any(re.search(p, content.lower()) for p in hallucination_patterns):
-            logger.warning("⚠️ Phát hiện LLM narrate tool call (ảo giác), đang chặn và sửa lại response.")
+            logger.warning("️ Phát hiện LLM narrate tool call (ảo giác), đang chặn và sửa lại response.")
             return (
                 "Tôi không tìm thấy thông tin cụ thể về yêu cầu này trong tài liệu hiện có. "
                 "Vui lòng liên hệ trực tiếp với bệnh viện để được hỗ trợ chính xác nhất."

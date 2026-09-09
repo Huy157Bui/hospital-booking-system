@@ -6,9 +6,9 @@ logger = logging.getLogger(__name__)
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Generic, TypeVar, cast
+from typing import Generic, TypeVar
 
-from sqlalchemy import exists, func, select, distinct, Date
+from sqlalchemy import exists, func, select, distinct, Date, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
