@@ -14,6 +14,14 @@ from app.models import (
     UserRole,
 )
 
+def validate_strong_password(v: str) -> str:
+    if len(v) < 8:
+        raise ValueError("Password must be at least 8 characters long")
+    if not any(c.isupper() for c in v):
+        raise ValueError("Password must contain at least one uppercase letter")
+    if not any(c.isdigit() for c in v):
+        raise ValueError("Password must contain at least one digit")
+    return v
 
 class UserBase(BaseModel):
     username: str
@@ -27,35 +35,46 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     full_name: str = Field(..., min_length=1, max_length=100)
-    password: str = Field(..., min_length=8)
+    password: str = Field(...)
 
     @field_validator("password")
     @classmethod
     def password_must_be_strong(cls, v: str) -> str:
-        if not any(c.isupper() for c in v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit")
-        return v
+        return validate_strong_password(v)
 
 
 class UserUpdate(BaseModel):
     username: str | None = None
     email: EmailStr | None = None
     full_name: str | None = None
-    phone: str | None = Field(
-        default=None,
-        pattern=r"^(0|\+84)(3|5|7|8|9)[0-9]{8}$",
-        description="Số điện thoại Việt Nam hợp lệ (VD: 0912345678 hoặc +84912345678)",
-    )
+    phone: str | None = Field(default=None,pattern=r"^(0|\+84)(3|5|7|8|9)[0-9]{8}$")
     avatar: str | None = None
     role: UserRole | None = None
     is_active: bool | None = None
     password: str | None = None
 
+
+class UserProfileUpdate(BaseModel):
+    username: str | None = None
+    email: EmailStr | None = None
+    full_name: str | None = None
+    phone: str | None = None
+    avatar: str | None = None
+    password: str | None = None
+
+
+class UserAdminUpdate(UserProfileUpdate):
+    role: UserRole | None = None
+    is_active: bool | None = None
+
 class ChangePasswordRequest(BaseModel):
     old_password: str
-    new_password: str = Field(min_length=6)
+    new_password: str = Field(...)
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_must_be_strong(cls, v: str) -> str:
+        return validate_strong_password(v)
 
 
 class RefreshTokenRequest(BaseModel):
@@ -93,7 +112,6 @@ class Token(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     user: UserOut
-
 
 class PatientBase(BaseModel):
     date_of_birth: date | None = None
@@ -685,12 +703,11 @@ class ChatResponse(BaseModel):
 class DoctorAvailabilityOut(BaseModel):
     doctor_id: int
     doctor_name: str
-    specialty: str
+    specialty: ChangePasswordRequest
     work_date: date
     available_slots: list[ScheduleSlotOut]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class AppointmentAvailabilityQuery(BaseModel):
     doctor_id: int

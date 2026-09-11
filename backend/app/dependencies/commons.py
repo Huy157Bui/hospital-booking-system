@@ -60,20 +60,14 @@ async def get_current_doctor_profile(
     doctor_service: DoctorServiceDep,
     current_user: User = Depends(check_doctor),
 ) -> Doctor:
-    try:
-        return await doctor_service.get_profile_by_user_id(current_user.id)
-    except ValueError as e:
-        raise HTTPException(404, str(e))
+    return await doctor_service.get_profile_by_user_id(current_user.id)
 
 
 async def get_current_patient_profile(
     patient_service: PatientServiceDep,
     current_user: User = Depends(check_patient),
 ) -> Patient:
-    try:
-        return await patient_service.get_profile_by_user_id(current_user.id)
-    except ValueError as e:
-        raise HTTPException(404, str(e))
+    return await patient_service.get_profile_by_user_id(current_user.id)
 
 
 async def get_owned_schedule_slot(
@@ -81,31 +75,18 @@ async def get_owned_schedule_slot(
     schedule_service: ScheduleServiceDep,
     doctor: Doctor = Depends(get_current_doctor_profile),
 ) -> ScheduleSlot:
-    try:
-        return await schedule_service.get_owned_slot(slot_id, doctor.id)
-    except ValueError as e:
-        if str(e) == "Schedule slot not found":
-            raise HTTPException(404, str(e))
-        raise HTTPException(403, str(e))
+    return await schedule_service.get_owned_slot(slot_id, doctor.id)
 
 
 async def get_owned_medical_record(
     patient_service: PatientServiceDep,
     patient: Patient = Depends(get_current_patient_profile),
 ):
-    try:
-        return await patient_service.get_owned_medical_record(patient.id)
-    except ValueError as e:
-        raise HTTPException(404, str(e))
+    return await patient_service.get_owned_medical_record(patient.id)
 
 async def get_appointment_record_access(
     appointment_id: int,
     appointment_service: AppointmentServiceDep,
     current_user: User = Depends(get_current_active_user),
 ) -> Appointment:
-    try:
-        return await appointment_service.get_accessible_appointment(appointment_id, current_user)
-    except ValueError as e:
-        if str(e) == "Appointment not found":
-            raise HTTPException(404, str(e))
-        raise HTTPException(403, str(e))
+    return await appointment_service.get_accessible_appointment(appointment_id, current_user)

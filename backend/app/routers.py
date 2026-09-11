@@ -305,14 +305,14 @@ async def get_my_patients(
 ):
     return await doctor_service.get_my_patients(current_doctor)
 
-@doctors_router.put("/me/schedules/{schedule_id}", response_model=ScheduleOut)
-async def update_my_schedule(
-    schedule_id: int,
-    schedule_data: ScheduleUpdate,
-    doctor_service: DoctorServiceDep,
-    current_doctor: User = Depends(check_doctor),
-):
-    return await doctor_service.update_my_schedule(current_doctor, schedule_id, schedule_data)
+#@doctors_router.put("/me/schedules/{schedule_id}", response_model=ScheduleOut)
+#async def update_my_schedule(
+#    schedule_id: int,
+#    schedule_data: ScheduleUpdate,
+#    doctor_service: DoctorServiceDep,
+#    current_doctor: User = Depends(check_doctor),
+#):
+#    return await doctor_service.update_my_schedule(current_doctor, schedule_id, schedule_data)
 
 @doctors_router.patch("/me/schedule-slots/{slot_id}", response_model=ScheduleSlotOut)
 async def update_my_schedule_slot(

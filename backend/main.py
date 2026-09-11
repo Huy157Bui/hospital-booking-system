@@ -6,6 +6,7 @@ from starlette.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.admin import admin_router, reports_router
+from app.dependencies.services import get_rag_service
 from app.routers import (
     auth_router,
     users_router,
@@ -29,6 +30,7 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    get_rag_service()
     yield
 
 
@@ -36,7 +38,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key=settings.SECRET_KEY,
+    secret_key=settings.SESSION_SECRET_KEY,
     https_only=False,
 )
 

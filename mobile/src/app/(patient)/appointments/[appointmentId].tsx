@@ -133,6 +133,14 @@ export default function AppointmentDetailScreen() {
   const { date, time } = formatDateTime();
   const doctorName = appointment.slot?.schedule?.doctor?.user?.full_name || 'Đang cập nhật';
   const specialtyName = appointment.slot?.schedule?.doctor?.specialty?.name || 'Chuyên khoa';
+
+  const isOverdue = (() => {
+  const workDate = appointment.slot?.schedule?.work_date;
+  const startTime = appointment.slot?.start_time;
+  if (!workDate || !startTime) return false;
+  const slotDateTime = new Date(`${workDate}T${startTime}`);
+  return slotDateTime < new Date();
+  })();
   
   const canCancel = appointment.status === 'PENDING' || appointment.status === 'CONFIRMED';
   const isPaidOrCompleted = appointment.status === 'PAID' || appointment.status === 'COMPLETED';
@@ -189,6 +197,21 @@ export default function AppointmentDetailScreen() {
               </View>
             </View>
           </View>
+
+          {isOverdue && (appointment.status === 'PENDING' || appointment.status === 'CONFIRMED') && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.detailRow}>
+                <Ionicons name="alert-circle-outline" size={22} color="#f59e0b" />
+                <View style={styles.detailTextContainer}>
+                  <Text style={styles.detailLabel}>Lưu ý</Text>
+                  <Text style={[styles.detailValue, { color: '#f59e0b' }]}>
+                    Lịch hẹn đã quá thời gian dự kiến. Vui lòng liên hệ hotline nếu cần hỗ trợ.
+                  </Text>
+                </View>
+              </View>
+            </>
+          )}
 
           {appointment.note && (
             <>

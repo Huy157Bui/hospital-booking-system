@@ -96,6 +96,8 @@ from app.schemas import (
     UserUpdate,
     MedicineUpdate,
     MedicineCreate,
+    UserProfileUpdate,
+    UserAdminUpdate,
 )
 from app.utils import generate_record_number
 
@@ -316,7 +318,7 @@ class UserService:
     def get_profile(self, current_user: User):
         return current_user
 
-    async def update_profile(self, current_user: User, update_data: UserUpdate) -> User:
+    async def update_profile(self, current_user: User, update_data: UserProfileUpdate) -> User:
         data = update_data.model_dump(exclude_unset=True, exclude_none=True)
         if "email" in data and data["email"] != current_user.email:
             existing_user = await self.user_repo.get_by_email(data["email"])
@@ -346,7 +348,7 @@ class UserService:
             skip=skip, limit=limit, role=role, is_active=is_active
         )
 
-    async def update_user_by_admin(self, user_id: int, update_data: UserUpdate) -> User:
+    async def update_user_by_admin(self, user_id: int, update_data: UserAdminUpdate) -> User:
         user = await self.user_repo.get_by_id(user_id)
         if not user:
             raise ResourceNotFound("Không tìm thấy người dùng")
@@ -480,9 +482,7 @@ class AppointmentService:
         current_user: User,
         cancel_data: AppointmentCancel,
     ):
-        appointment = await self.appointment_repo.get_by_id_with_slot(
-            appointment_id
-        )
+        appointment = await self.appointment_repo.get_by_id_with_slot(appointment_id)
         if not appointment:
             raise ResourceNotFound("Không tìm thấy lịch hẹn")
 
@@ -497,6 +497,18 @@ class AppointmentService:
             raise BadRequestException("Lịch hẹn đã được hủy trước đó")
         if appointment.status == AppointmentStatus.COMPLETED:
             raise BadRequestException("Không thể hủy lịch hẹn đã hoàn thành")
+        if appointment.status == AppointmentStatus.PAID:
+            raise BadRequestException(
+                "Lịch hẹn đã thanh toán, không thể tự hủy. Vui lòng liên hệ hotline để được hỗ trợ."
+            )
+
+        slot_datetime = datetime.combine(
+            appointment.slot.schedule.work_date, appointment.slot.start_time
+        )
+        if slot_datetime < datetime.now():
+            raise BadRequestException(
+                "Lịch hẹn đã quá thời gian, không thể tự hủy. Vui lòng liên hệ hotline để được hỗ trợ."
+            )
 
         return await self.appointment_repo.cancel(
             appointment, cancel_data.cancel_reason
@@ -804,6 +816,10 @@ class AppointmentService:
             raise ResourceNotFound("Không tìm thấy lịch hẹn")
         if appointment.status == AppointmentStatus.CANCELLED:
             raise BadRequestException("Lịch hẹn đã được hủy trước đó")
+        if appointment.status == AppointmentStatus.PAID:
+            raise BadRequestException(
+                "Lịch hẹn đã thanh toán, không thể tự hủy. Vui lòng liên hệ hotline để được hỗ trợ."
+            )
         return await self.appointment_repo.cancel(appointment, cancel_reason)
 
 class SpecialtyService:
@@ -1168,6 +1184,14 @@ class MedicineService:
         medicine.status = "inactive"
         await self.medicine_repo.update(medicine)
 
+    async def toggle_medicine_status(self, medicine_id: int) -> Medicine:
+        medicine = await self.medicine_repo.get_by_id(medicine_id)
+        if not medicine:
+            raise ResourceNotFound("Không tìm thấy thuốc")
+
+        medicine.status = "inactive" if medicine.status == "active" else "active"
+        await self.medicine_repo.update(medicine)
+        return medicine
 
 class ReportService:
     def __init__(self, payment_repo: PaymentRepoDep, report_repo: ReportRepoDep):
@@ -1846,13 +1870,14 @@ class IntentExtractionService:
                     if not any(k in clean_name.lower() for k in ["bạch mai", "trung tâm", "khoa", "bệnh viện", "phòng"]):
                         return clean_name
 
-        simple_pattern = r"(?:bác sĩ|BS)\\s+([A-ZÀ-Ỹ][a-zà-ỹ]+(?:\\s+[A-ZÀ-Ỹ][a-zà-ỹ]+)+)"
+        simple_pattern = (
+            r"(?:bác sĩ|BS)\\s+([A-ZÀ-Ỹ][a-zà-ỹ]+(?:\\s+[A-ZÀ-Ỹ][a-zà-ỹ]+)+)"
+        )
         match2 = re.search(simple_pattern, msg, re.IGNORECASE)
         if match2:
             return match2.group(1).strip()
 
         return None
-
 
     def has_explicit_doctor_intent(self, text: str) -> bool:
         return any(k in text.lower() for k in DOCTOR_INTENT_KEYWORDS)
@@ -1895,6 +1920,12 @@ class IntentExtractionService:
                     f"  Parse doctor_id từ history (turn gần nhất): {doctor_id}"
                 )
                 return doctor_id
+        return None
+
+    def _parse_slot_index(self, user_message: str) -> int | None:
+        match = re.search(r"(?:khung giờ|slot|số|thứ)\s*(\d+)", user_message, re.IGNORECASE)
+        if match:
+            return int(match.group(1)) - 1  # user nói 1-based, list là 0-based
         return None
 
     def extract_doctor_name_from_history(
@@ -2177,6 +2208,8 @@ class AgentChatService:
       liên hệ hotline hoặc đến Khoa Khám bệnh.
 
     LƯU Ý:
+    - Hôm nay là ngày {current_date}. Khi người dùng nói "ngày DD/MM" mà không nêu năm,
+      LUÔN hiểu là năm hiện tại, KHÔNG được tự suy đoán năm khác.
     - "tim mach" (không dấu) = "Tim Mạch" (có dấu)
     - Doctor ID là số nguyên từ kết quả search_doctors
 
@@ -2386,8 +2419,12 @@ class AgentChatService:
         if not availability_intent:
             return None
 
-        logger.info(f"=== DETERMINISTIC ROUTING: Availability intent detected: {availability_intent} ===")
-        tool_result = await self._execute_read_tool("check_availability", availability_intent, chat_history)
+        logger.info(
+            f"=== DETERMINISTIC ROUTING: Availability intent detected: {availability_intent} ==="
+        )
+        tool_result = await self._execute_read_tool(
+            "check_availability", availability_intent, chat_history
+        )
 
         if tool_result.get("error"):
             return {"reply": tool_result["error"], "suggestions": ["Tìm bác sĩ khác", "Liên hệ hotline"]}
@@ -2438,6 +2475,7 @@ class AgentChatService:
 
     async def _invoke_llm_safely(self, llm_with_tools, messages, _round, user_message, chat_history):
         try:
+            logger.info(f"MESSAGES SENT TO LLM: {[(type(m).__name__, m.content[:200] if hasattr(m,'content') else None) for m in messages]}")
             ai_response = await asyncio.wait_for(llm_with_tools.ainvoke(messages), timeout=60.0)
             return ai_response, None
         except asyncio.TimeoutError:
@@ -2524,7 +2562,20 @@ class AgentChatService:
                 "suggestions": ["Tìm bác sĩ khác", "Xem chuyên khoa"],
             }
 
-        if any(k in msg_lower for k in ["xác nhận", "đồng ý", "đặt luôn", "chốt", "ok", "oke", "được", "vâng", "yes"]):
+        if any(
+            k in msg_lower
+            for k in [
+                "xác nhận",
+                "đồng ý",
+                "đặt luôn",
+                "chốt",
+                "ok",
+                "oke",
+                "được",
+                "vâng",
+                "yes",
+            ]
+        ):
             pending = _pending_bookings.get(session_id)
             if pending:
                 confirm_result = await self._handle_pending_confirmation(session_id, msg_lower, pending, current_user)
@@ -2542,7 +2593,9 @@ class AgentChatService:
             requested_slot_id = int(slot_id_match.group(1)) if slot_id_match else None
 
             if requested_slot_id:
-                slot_info = await self.appointment_service.appointment_repo.get_slot_with_doctor(requested_slot_id)
+                slot_info = await self.appointment_service.appointment_repo.get_slot_with_doctor(
+                    requested_slot_id
+                )
 
                 if not slot_info:
                     return {
@@ -2580,7 +2633,7 @@ class AgentChatService:
                 doctor_id = self.intent_service.parse_doctor_id_from_history(
                     chat_history
                 )
-            work_date = "2026-09-15"
+            work_date = datetime.now().strftime('%Y-%m-%d')
             slots = []
 
         if not doctor_id:
@@ -2590,6 +2643,15 @@ class AgentChatService:
             }
 
         if slots:
+            requested_index = self.intent_service._parse_slot_index(user_message)
+            if requested_index is not None:
+                if 0 <= requested_index < len(slots):
+                    return self._propose_first_slot(session_id, doctor_id, slots[requested_index])
+                else:
+                    return {
+                        "reply": f"Chỉ có {len(slots)} khung giờ trống. Bạn vui lòng chọn số từ 1 đến {len(slots)}.",
+                        "suggestions": ["Xem lại danh sách khung giờ"],
+                    }
             return self._propose_first_slot(session_id, doctor_id, slots[0])
 
         try:
@@ -2756,7 +2818,9 @@ class AgentChatService:
             r"tôi sẽ tìm kiếm thêm", r"hãy chờ tôi gọi", r"tôi sẽ thực hiện điều này",
         ]
         if any(re.search(p, content.lower()) for p in hallucination_patterns):
-            logger.warning("️ Phát hiện LLM narrate tool call (ảo giác), đang chặn và sửa lại response.")
+            logger.warning(
+                "️ Phát hiện LLM narrate tool call (ảo giác), đang chặn và sửa lại response."
+            )
             return (
                 "Tôi không tìm thấy thông tin cụ thể về yêu cầu này trong tài liệu hiện có. "
                 "Vui lòng liên hệ trực tiếp với bệnh viện để được hỗ trợ chính xác nhất."
@@ -2817,8 +2881,12 @@ class AgentChatService:
             )
         return tools
 
+    def _build_system_prompt(self) -> str:
+        current_date = datetime.now().strftime('%d/%m/%Y')
+        return self.SYSTEM_PROMPT.format(current_date=current_date)
+
     def _history_to_messages(self, chat_history: Optional[list[Any]]) -> list:
-        messages: list = [SystemMessage(content=self.SYSTEM_PROMPT)]
+        messages: list = [SystemMessage(content=self._build_system_prompt())]
         if chat_history:
             for turn in chat_history[-6:]:
                 role = turn.get("role") if isinstance(turn, dict) else getattr(turn, "role", "user")

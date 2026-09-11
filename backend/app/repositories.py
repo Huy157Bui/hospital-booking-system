@@ -1,6 +1,6 @@
 import logging
 
-from app.schemas import PaymentOut, ScheduleOut
+from app.schemas import PaymentOut, ScheduleOut, AppointmentSummaryOut
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +72,8 @@ class BaseRepository(Generic[ModelType]):
             await self.db.flush()
 
     async def count(self) -> int:
-        result = await self.db.execute(select(self.model))
-        return len(result.scalars().all())
+        result = await self.db.execute(select(func.count()).select_from(self.model))
+        return result.scalar_one()
 
     async def commit(self) -> None:
         await self.db.commit()
@@ -475,22 +475,6 @@ class ScheduleSlotRepository(BaseRepository[ScheduleSlot]):
         return result.scalar_one_or_none()
 
     async def get_available_slots_by_doctor_and_date(
-        self, doctor_id: int, date: date
-    ) -> list[ScheduleSlot]:
-        statement = (
-            select(ScheduleSlot)
-            .join(Schedule)
-            .where(
-                Schedule.doctor_id == doctor_id,
-                Schedule.date == date,
-                Schedule.status == ScheduleSlotStatus.AVAILABLE,
-            )
-            .order_by(ScheduleSlot.start_time)
-        )
-        result = await self.db.execute(statement)
-        return list(result.scalars().all())
-
-    async def get_available_slots_by_doctor_and_date(
         self, doctor_id: int, work_date: date
     ) -> list[ScheduleSlot]:
         stmt = (
@@ -691,7 +675,6 @@ class AppointmentRepository(BaseRepository[Appointment]):
     ) -> Appointment:
         appointment.status = new_status
         await self.db.flush()
-        await self.db.commit()
         await self.db.refresh(appointment)
         return appointment
 
@@ -815,13 +798,6 @@ class ExaminationRepository(BaseRepository[Examination]):
         ]
 
     async def get_patients_by_doctor_id(self, doctor_id: int) -> list[dict]:
-        """
-        Lấy danh sách bệnh nhân đã từng được bác sĩ này khám,
-        kèm tổng số lần khám và ngày khám gần nhất.
-        """
-        from sqlalchemy import select, func
-        from app.models import Patient, User, Examination
-
         stmt = (
             select(
                 Patient.id,
@@ -1002,7 +978,7 @@ class PaymentRepository(BaseRepository[Payment]):
         )
         return result.scalar_one_or_none()
 
-    async def get_by_patient_id(self, patient_id: int) -> list[Payment]:
+    async def get_by_patient_id(self, patient_id: int) -> list[PaymentOut]:
         stmt = (
             select(Payment)
             .join(Appointment, Payment.appointment_id == Appointment.id)
@@ -1027,30 +1003,29 @@ class PaymentRepository(BaseRepository[Payment]):
 
         result = await self.db.execute(stmt)
         payments = list(result.scalars().all())
-        result_out = []
+
+        result_out: list[PaymentOut] = []
         for p in payments:
-            p_dict = p.__dict__.copy()
+            payment_out = PaymentOut.model_validate(p)
+
             appt = p.appointment
-
+            summary: AppointmentSummaryOut | None = None
             if (
-                appt
-                and getattr(appt, "slot", None)
-                and getattr(appt.slot, "schedule", None)
-                and getattr(appt.slot.schedule, "doctor", None)
+                    appt
+                    and getattr(appt, "slot", None)
+                    and getattr(appt.slot, "schedule", None)
+                    and getattr(appt.slot.schedule, "doctor", None)
             ):
-
                 doctor = appt.slot.schedule.doctor
-                p_dict["appointment_summary"] = {
-                    "id": appt.id,
-                    "doctor_name": doctor.user.full_name if getattr(doctor, 'user', None) else "Chưa cập nhật",
-                    "specialty_name": doctor.specialty.name if getattr(doctor, 'specialty', None) else "Chưa cập nhật",
-                    "work_date": appt.slot.schedule.work_date,
-                    "start_time": appt.slot.start_time
-                }
-            else:
-                p_dict["appointment_summary"] = None
+                summary = AppointmentSummaryOut(
+                    id=appt.id,
+                    doctor_name=doctor.user.full_name if getattr(doctor, "user", None) else "Chưa cập nhật",
+                    specialty_name=doctor.specialty.name if getattr(doctor, "specialty", None) else "Chưa cập nhật",
+                    work_date=appt.slot.schedule.work_date,
+                    start_time=appt.slot.start_time,
+                )
 
-            result_out.append(PaymentOut.model_validate(p_dict))
+            result_out.append(payment_out.model_copy(update={"appointment_summary": summary}))
 
         return result_out
 

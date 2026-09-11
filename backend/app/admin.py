@@ -228,7 +228,7 @@ async def toggle_medicine_status(
     medicine_service: MedicineServiceDep,
     current_admin: User = Depends(check_admin),
 ):
-    return await medicine_service.delete_medicine(medicine_id)
+    return await medicine_service.toggle_medicine_status(medicine_id)
 
 
 @admin_router.post("/specialties", response_model=SpecialtyOut, status_code=201)
@@ -259,11 +259,11 @@ async def update_specialty(
     return await specialty_service.update_specialty(specialty_id, specialty_data)
 
 
-@admin_router.patch("/doctors/{doctor_id}/specialty", response_model=DoctorOut)
-async def admin_assign_doctor_specialty(
-    doctor_id: int,
-    specialty_id: int | None,
-    doctor_service: DoctorServiceDep,
-    current_admin: User = Depends(check_admin),
-):
-    return await doctor_service.assign_specialty(doctor_id, specialty_id)
+#@admin_router.patch("/doctors/{doctor_id}/specialty", response_model=DoctorOut)
+#async def admin_assign_doctor_specialty(
+#    doctor_id: int,
+#    specialty_id: int | None,
+#    doctor_service: DoctorServiceDep,
+#    current_admin: User = Depends(check_admin),
+#):
+#    return await doctor_service.assign_specialty(doctor_id, specialty_id)

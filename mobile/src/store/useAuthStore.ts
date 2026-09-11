@@ -34,15 +34,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
 
   login: async (credentials) => {
-    try {
-      const response = await apiClient.post<TokenResponse>('/auth/login', credentials);
-      const { access_token, user } = response.data;
-      await storage.saveToken(access_token);
-      set({ token: access_token, user, role: user.role, isAuthenticated: true });
-    } catch (error: any) {
-      throw new Error(parseErrorMessage(error, 'Đăng nhập thất bại'));
-    }
-  },
+  try {
+    const response = await apiClient.post<TokenResponse>('/auth/login', credentials);
+    const { access_token, refresh_token, user } = response.data;
+    await storage.saveToken(access_token);
+    await storage.saveRefreshToken(refresh_token);
+    set({ token: access_token, user, role: user.role, isAuthenticated: true });
+  } catch (error: any) {
+    throw new Error(parseErrorMessage(error, 'Đăng nhập thất bại'));
+  }
+},
 
   register: async (credentials) => {
     try {
