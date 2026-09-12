@@ -258,12 +258,3 @@ async def update_specialty(
 ):
     return await specialty_service.update_specialty(specialty_id, specialty_data)
 
-
-#@admin_router.patch("/doctors/{doctor_id}/specialty", response_model=DoctorOut)
-#async def admin_assign_doctor_specialty(
-#    doctor_id: int,
-#    specialty_id: int | None,
-#    doctor_service: DoctorServiceDep,
-#    current_admin: User = Depends(check_admin),
-#):
-#    return await doctor_service.assign_specialty(doctor_id, specialty_id)
