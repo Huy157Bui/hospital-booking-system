@@ -1,5 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Appointment } from '../../types/appointment';
+import { isAppointmentOverdue } from '../../utils/appointment';
 
 interface Props {
   appointment: Appointment;
@@ -9,7 +10,6 @@ interface Props {
 }
 
 export function AppointmentCard({ appointment, variant, onPress, onAction }: Props) {
-  
   const getStatusColor = (status: string | undefined) => {
     switch (status?.toUpperCase()) {
       case 'PENDING': return '#f59e0b';
@@ -57,7 +57,8 @@ export function AppointmentCard({ appointment, variant, onPress, onAction }: Pro
     ? rawTime.substring(0, 5) 
     : 'Giờ chưa xác định';
 
-  const canCancel = variant === 'patient' && (appointment.status === 'PENDING' || appointment.status === 'CONFIRMED');
+  const isOverdue = isAppointmentOverdue(appointment.slot?.schedule?.work_date, appointment.slot?.start_time);
+  const canCancel = variant === 'patient' && !isOverdue && (appointment.status === 'PENDING' || appointment.status === 'CONFIRMED');
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
@@ -76,7 +77,7 @@ export function AppointmentCard({ appointment, variant, onPress, onAction }: Pro
         {displayDate} - {displayTime}
       </Text>
 
-      {variant === 'patient' && onAction && (appointment.status === 'PENDING' || appointment.status === 'CONFIRMED') && (
+      {canCancel && onAction && (
         <TouchableOpacity style={styles.cancelBtn} onPress={onAction} activeOpacity={0.7}>
           <Text style={styles.cancelText}>Hủy lịch hẹn</Text>
         </TouchableOpacity>
@@ -122,7 +123,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start', 
   },
   badgeText: { color: '#fff', fontSize: 12, fontWeight: '600' }, 
-  
   cancelBtn: { 
     marginTop: 8, 
     backgroundColor: '#fee2e2', 
@@ -131,7 +131,6 @@ const styles = StyleSheet.create({
     alignItems: 'center' 
   },
   cancelText: { color: '#dc2626', fontWeight: '600', fontSize: 14 },
-
   actionBtn: { 
     marginTop: 12, 
     backgroundColor: '#e0e7ff', 

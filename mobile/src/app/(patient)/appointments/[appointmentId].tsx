@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { appointmentService } from '../../../services/appointmentService';
 import { Appointment } from '../../../types/appointment';
+import { isAppointmentOverdue } from '../../../utils/appointment';
 
 export default function AppointmentDetailScreen() {
   const { appointmentId } = useLocalSearchParams<{ appointmentId: string }>();
@@ -134,15 +135,12 @@ export default function AppointmentDetailScreen() {
   const doctorName = appointment.slot?.schedule?.doctor?.user?.full_name || 'Đang cập nhật';
   const specialtyName = appointment.slot?.schedule?.doctor?.specialty?.name || 'Chuyên khoa';
 
-  const isOverdue = (() => {
-  const workDate = appointment.slot?.schedule?.work_date;
-  const startTime = appointment.slot?.start_time;
-  if (!workDate || !startTime) return false;
-  const slotDateTime = new Date(`${workDate}T${startTime}`);
-  return slotDateTime < new Date();
-  })();
+  const isOverdue = isAppointmentOverdue(
+    appointment.slot?.schedule?.work_date, 
+    appointment.slot?.start_time
+  );
   
-  const canCancel = appointment.status === 'PENDING' || appointment.status === 'CONFIRMED';
+  const canCancel = !isOverdue && (appointment.status === 'PENDING' || appointment.status === 'CONFIRMED');
   const isPaidOrCompleted = appointment.status === 'PAID' || appointment.status === 'COMPLETED';
   
   const isPaymentCompleted = appointment.payment_status === 'PAID';
@@ -258,9 +256,7 @@ const styles = StyleSheet.create({
   errorText: { color: '#c62828', marginBottom: 16, textAlign: 'center', fontSize: 15 },
   retryButton: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#e3f2fd', borderRadius: 8 },
   retryText: { color: '#2f6fed', fontWeight: '600' },
-  
   scrollContent: { padding: 16 },
-  
   card: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -271,7 +267,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  
   doctorHeader: { flexDirection: 'row', alignItems: 'center' },
   avatarPlaceholder: {
     width: 56, height: 56, borderRadius: 28, backgroundColor: '#e3f2fd',
@@ -280,19 +275,15 @@ const styles = StyleSheet.create({
   doctorInfo: { flex: 1 },
   doctorName: { fontSize: 18, fontWeight: '700', color: '#1f2937', marginBottom: 4 },
   specialtyName: { fontSize: 14, color: '#6b7280' },
-  
   detailRow: { flexDirection: 'row', alignItems: 'flex-start' },
   detailTextContainer: { marginLeft: 16, flex: 1 },
   detailLabel: { fontSize: 13, color: '#9ca3af', marginBottom: 4, textTransform: 'uppercase', fontWeight: '600' },
   detailValue: { fontSize: 15, color: '#374151', fontWeight: '500', lineHeight: 22 },
-  
   divider: { height: 1, backgroundColor: '#f3f4f6', marginVertical: 16 },
-  
   badge: {
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, alignSelf: 'flex-start'
   },
   badgeText: { fontSize: 13, fontWeight: '600' },
-  
   cancelButton: {
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
     backgroundColor: '#ef4444', paddingVertical: 16, borderRadius: 12, gap: 8,

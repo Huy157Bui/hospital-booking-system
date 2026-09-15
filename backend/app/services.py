@@ -476,6 +476,8 @@ class AppointmentService:
         appointment = await self.appointment_repo.create_with_slot(appointment)
         return appointment
 
+    from datetime import datetime
+
     async def cancel_appointment(
         self,
         appointment_id: int,
@@ -485,30 +487,30 @@ class AppointmentService:
         appointment = await self.appointment_repo.get_by_id_with_slot(appointment_id)
         if not appointment:
             raise ResourceNotFound("Không tìm thấy lịch hẹn")
-
-        if current_user.role != UserRole.ADMIN:
-            if current_user.role != UserRole.PATIENT:
-                raise ForbiddenException("Bạn không có quyền hủy lịch hẹn này")
+        is_admin = current_user.role == UserRole.ADMIN
+        is_patient = current_user.role == UserRole.PATIENT
+        if not is_admin and not is_patient:
+            raise ForbiddenException("Bạn không có quyền hủy lịch hẹn này")
+        if is_patient:
             patient = await self.patient_repo.get_by_user_id(current_user.id)
             if not patient or appointment.patient_id != patient.id:
                 raise ForbiddenException("Bạn không có quyền hủy lịch hẹn này")
-
         if appointment.status == AppointmentStatus.CANCELLED:
             raise BadRequestException("Lịch hẹn đã được hủy trước đó")
         if appointment.status == AppointmentStatus.COMPLETED:
-            raise BadRequestException("Không thể hủy lịch hẹn đã hoàn thành")
-        if appointment.status == AppointmentStatus.PAID:
+            raise BadRequestException("Không thể hủy lịch hẹn đã hoàn thành (đã khám)")
+        if appointment.status == AppointmentStatus.PAID and not is_admin:
             raise BadRequestException(
                 "Lịch hẹn đã thanh toán, không thể tự hủy. Vui lòng liên hệ hotline để được hỗ trợ."
             )
-
-        slot_datetime = datetime.combine(
-            appointment.slot.schedule.work_date, appointment.slot.start_time
-        )
-        if slot_datetime < datetime.now():
-            raise BadRequestException(
-                "Lịch hẹn đã quá thời gian, không thể tự hủy. Vui lòng liên hệ hotline để được hỗ trợ."
+        if not is_admin:
+            slot_datetime = datetime.combine(
+                appointment.slot.schedule.work_date, appointment.slot.start_time
             )
+            if slot_datetime < datetime.now():
+                raise BadRequestException(
+                    "Lịch hẹn đã quá thời gian, không thể tự hủy. Vui lòng liên hệ lễ tân để được hỗ trợ."
+                )
 
         return await self.appointment_repo.cancel(
             appointment, cancel_data.cancel_reason
